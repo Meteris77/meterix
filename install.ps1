@@ -1,6 +1,6 @@
 <#
     Météris Installer - Météris Informatique
-    Lancement : irm https://raw.githubusercontent.com/Meteris77/meterix/main/install.ps1 | iex
+    Lancement : irm "https://raw.githubusercontent.com/Meteris77/meterix/main/install.ps1?v=$(Get-Random)" | iex
 #>
 
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
@@ -9,7 +9,7 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 # CONFIGURATION
 # =========================
 $repoBase   = "https://raw.githubusercontent.com/Meteris77/meterix/main"
-$appsUrl    = "$repoBase/apps.json"
+$appsUrl    = "$repoBase/apps.json?v=$(Get-Random)"
 $logoUrl    = "https://raw.githubusercontent.com/Meteris77/meterix/main/Logo.png"
 $selfUrl    = "$repoBase/install.ps1"
 
@@ -33,7 +33,7 @@ if (-not $isAdmin) {
         try {
             Start-Process powershell -Verb RunAs -ArgumentList @(
                 "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
-                "irm $selfUrl | iex"
+                "irm ""$selfUrl`?v=$(Get-Random)"" | iex"
             )
             exit
         } catch {
@@ -58,7 +58,7 @@ if (-not $apps -or $apps.Count -eq 0) {
 }
 
 # =========================
-# INTERFACE (WPF - Design Premium sans DataTrigger)
+# INTERFACE (WPF - Nettoyée et Robustifiée)
 # =========================
 [xml]$xaml = @'
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -161,9 +161,7 @@ if (-not $apps -or $apps.Count -eq 0) {
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             <Border Grid.Column="0" BorderBrush="{StaticResource BorderGray}" BorderThickness="1" CornerRadius="6" Background="White" Margin="0,0,8,0" Height="36">
-                <Grid>
-                    <TextBox Name="SearchBox" BorderThickness="0" Background="Transparent" Padding="10,0" VerticalContentAlignment="Center" FontSize="13" Foreground="{StaticResource TextDark}" Text="Rechercher un logiciel..."/>
-                </Grid>
+                <TextBox Name="SearchBox" BorderThickness="0" Background="Transparent" Padding="10,0" VerticalContentAlignment="Center" FontSize="13" Foreground="{StaticResource TextDark}" Text="Rechercher un logiciel..."/>
             </Border>
             <Button Name="BtnSelectAll" Grid.Column="1" Content="Tout cocher" Style="{StaticResource SecondaryButton}" Width="110" Height="36" Margin="0,0,6,0"/>
             <Button Name="BtnSelectNone" Grid.Column="2" Content="Tout décocher" Style="{StaticResource SecondaryButton}" Width="110" Height="36"/>
@@ -206,7 +204,6 @@ if (-not $apps -or $apps.Count -eq 0) {
 </Window>
 '@
 
-# Chargement de la fenêtre
 try {
     $reader = New-Object System.Xml.XmlNodeReader $xaml
     $window = [Windows.Markup.XamlReader]::Load($reader)
@@ -249,16 +246,13 @@ catch {
     $LogoImage.Visibility = "Collapsed"
 }
 
-# Brushes de statuts
 $brushBlue  = [System.Windows.Media.SolidColorBrush]::new([System.Windows.Media.Color]::FromRgb(0,129,185))
 $brushGreen = [System.Windows.Media.SolidColorBrush]::new([System.Windows.Media.Color]::FromRgb(34,197,94))
 $brushRed   = [System.Windows.Media.SolidColorBrush]::new([System.Windows.Media.Color]::FromRgb(239,68,68))
 $brushGray  = [System.Windows.Media.SolidColorBrush]::new([System.Windows.Media.Color]::FromRgb(100,116,139))
 $brushText  = [System.Windows.Media.SolidColorBrush]::new([System.Windows.Media.Color]::FromRgb(15,23,42))
 
-# =========================
-# GESTION RECHERCHE (GotFocus / LostFocus / TextChanged)
-# =========================
+# Placeholder Manuel
 $placeholderText = "Rechercher un logiciel..."
 $SearchBox.Foreground = [System.Windows.Media.Brushes]::Gray
 
@@ -268,7 +262,6 @@ $SearchBox.Add_GotFocus({
         $SearchBox.Foreground = $brushText
     }
 })
-
 $SearchBox.Add_LostFocus({
     if ([string]::IsNullOrWhiteSpace($SearchBox.Text)) {
         $SearchBox.Text = $placeholderText
@@ -359,7 +352,7 @@ foreach ($cat in $categoriesGrouped) {
     [void]$CategoriesContainer.Children.Add($catCard)
 }
 
-# Logiciel de filtrage réel
+# Recherche
 $SearchBox.Add_TextChanged({
     $term = $SearchBox.Text.Trim().ToLower()
     if ($term -eq $placeholderText.ToLower()) { $term = "" }
@@ -394,7 +387,7 @@ $BtnSelectNone.Add_Click({
 })
 
 # =========================
-# COEUR D'INSTALLATION (ARRIÈRE-PLAN)
+# PROCESSUS D'INSTALLATION
 # =========================
 $installWorker = {
     param($itemsData, $sync)
@@ -466,9 +459,6 @@ $installWorker = {
     $sync.Finished = $true
 }
 
-# =========================
-# SURVEILLANCE & ACTIONS INTERFACE
-# =========================
 $BtnInstall.Add_Click({
     $selected = $rows | Where-Object { $_.cb.IsChecked -eq $true }
     if (-not $selected -or $selected.Count -eq 0) {
@@ -559,7 +549,4 @@ $BtnInstall.Add_Click({
     $timer.Start()
 })
 
-# =========================
-# AFFICHAGE FENÊTRE
-# =========================
 $window.ShowDialog() | Out-Null
