@@ -43,10 +43,14 @@ if (-not $isAdmin) {
 }
 
 # =========================
-# CHARGEMENT DE LA LISTE D'APPLICATIONS
+# CHARGEMENT ET TRI DE LA LISTE D'APPLICATIONS
 # =========================
 try {
     $apps = Invoke-RestMethod -Uri $appsUrl
+    if ($apps) {
+        # Tri de la liste par ordre alphabétique du nom
+        $apps = $apps | Sort-Object name
+    }
 }
 catch {
     [System.Windows.MessageBox]::Show("Impossible de charger la liste des logiciels (apps.json).`n`n$($_.Exception.Message)", "Météris Informatique - Erreur")
