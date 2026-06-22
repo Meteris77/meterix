@@ -5,6 +5,9 @@
 
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 
+# Contexte de sécurité requis pour les requêtes web GitHub
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13
+
 # =========================
 # CONFIGURATION
 # =========================
