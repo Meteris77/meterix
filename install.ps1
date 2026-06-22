@@ -14,7 +14,7 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 $repoBase   = "https://raw.githubusercontent.com/Meteris77/meterix/main"
 $appsUrl    = "$repoBase/apps.json"
 $logoUrl    = "$repoBase/logo.png"
-$selfUrl    = "https://is.gd/Meteris"  # Mis à jour avec ton lien court
+$selfUrl    = "https://is.gd/Meteris"
 
 # =========================
 # DROITS ADMINISTRATEUR
@@ -184,7 +184,7 @@ if (-not $apps -or $apps.Count -eq 0) {
 
         <Grid Grid.Row="2" Margin="0,0,0,12">
             <Grid.ColumnDefinitions>
-                <Definition Width="*"/>
+                <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
