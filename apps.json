@@ -3,22 +3,5 @@
   { "name": "Firefox", "id": "Mozilla.Firefox" },
   { "name": "VLC", "id": "VideoLAN.VLC" },
   { "name": "7-Zip", "id": "7zip.7zip" },
-  { "name": "Adobe Reader", "id": "Adobe.Acrobat.Reader.64-bit" },
-
-  { "name": "Office 365", "id": "Microsoft.Office" },
-  { "name": "Office 2024", "id": "Microsoft.Office" },
-
-  { "name": "Project 2013", "id": "Microsoft.Project.2013" },
-  { "name": "Project 2019", "id": "Microsoft.Project.2019" },
-  { "name": "Project 2021", "id": "Microsoft.Project.2021" },
-  { "name": "Project 2024", "id": "Microsoft.Project.2024" },
-
-  {
-    "name": "Agent Meteris",
-    "url": "https://support.meteris.fr/api/files/public/6882b7e7bb778fe1aab50c7a/download"
-  },
-  {
-    "name": "Certinomis Safenet",
-    "url": "https://www.certinomis.com/publi/drivers/Certinomis-Safenet-x64-10.8-R8.msi"
-  }
+  { "name": "Adobe Reader", "id": "Adobe.Acrobat.Reader.64-bit" }
 ]
