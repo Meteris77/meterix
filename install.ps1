@@ -13,7 +13,7 @@ $appsUrl    = "$repoBase/apps.json"
 $logoUrl    = "$repoBase/Logo.png"
 $selfUrl    = "$repoBase/install.ps1"
 
-# Sécurité TLS pour le téléchargement du logo
+# Sécurité TLS pour le téléchargement
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13
 
 # =========================
@@ -58,7 +58,7 @@ if (-not $apps -or $apps.Count -eq 0) {
 }
 
 # =========================
-# INTERFACE (WPF - Nouveau Design Premium)
+# INTERFACE (WPF - Design Premium Corrigé)
 # =========================
 [xml]$xaml = @'
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -70,14 +70,12 @@ if (-not $apps -or $apps.Count -eq 0) {
         Background="#FFF1F5F9"
         FontFamily="Segoe UI">
     <Window.Resources>
-        <!-- Charte Graphique Météris -->
         <SolidColorBrush x:Key="BrandBlue" Color="#0081B9"/>
         <SolidColorBrush x:Key="BrandBlueDark" Color="#00608A"/>
         <SolidColorBrush x:Key="BrandGray" Color="#475569"/>
         <SolidColorBrush x:Key="TextDark" Color="#0F172A"/>
         <SolidColorBrush x:Key="BorderGray" Color="#E2E8F0"/>
         
-        <!-- Style Bouton Principal (Lancer l'installation) -->
         <Style x:Key="PrimaryButton" TargetType="Button">
             <Setter Property="Background" Value="{StaticResource BrandBlue}"/>
             <Setter Property="Foreground" Value="White"/>
@@ -105,7 +103,6 @@ if (-not $apps -or $apps.Count -eq 0) {
             </Style.Triggers>
         </Style>
 
-        <!-- Style Boutons Alternatifs -->
         <Style x:Key="SecondaryButton" TargetType="Button">
             <Setter Property="Background" Value="White"/>
             <Setter Property="Foreground" Value="{StaticResource BrandGray}"/>
@@ -143,7 +140,6 @@ if (-not $apps -or $apps.Count -eq 0) {
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- Header Pro -->
         <Border Grid.Row="0" Background="White" CornerRadius="12" Padding="20,16" Margin="0,0,0,16" BorderBrush="{StaticResource BorderGray}" BorderThickness="1">
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -158,7 +154,6 @@ if (-not $apps -or $apps.Count -eq 0) {
             </Grid>
         </Border>
 
-        <!-- Barre d'outils (Recherche + sélections globales) -->
         <Grid Grid.Row="1" Margin="0,0,0,16">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
@@ -173,7 +168,7 @@ if (-not $apps -or $apps.Count -eq 0) {
                             <Style TargetType="TextBlock">
                                 <Setter Property="Visibility" Value="Collapsed"/>
                                 <Style.Triggers>
-                                    <DataTrigger Binding="{Text, ElementName=SearchBox}" Value="">
+                                    <DataTrigger Binding="{Binding Text, ElementName=SearchBox}" Value="">
                                         <Setter Property="Visibility" Value="Visible"/>
                                     </DataTrigger>
                                 </Style.Triggers>
@@ -186,12 +181,10 @@ if (-not $apps -or $apps.Count -eq 0) {
             <Button Name="BtnSelectNone" Grid.Column="2" Content="Tout décocher" Style="{StaticResource SecondaryButton}" Width="110" Height="36"/>
         </Grid>
 
-        <!-- Zone de défilement centrale (Conteneur principal des catégories) -->
         <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Padding="0,0,4,0">
             <StackPanel Name="CategoriesContainer"/>
         </ScrollViewer>
 
-        <!-- Section Suivi de Progression -->
         <Grid Grid.Row="3" Margin="4,20,4,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
@@ -210,10 +203,8 @@ if (-not $apps -or $apps.Count -eq 0) {
             <TextBlock Name="ProgressText" Grid.Column="1" Text="" VerticalAlignment="Center" Foreground="{StaticResource BrandGray}" FontWeight="Bold" FontSize="13" MinWidth="65" Margin="16,0,0,0" HorizontalAlignment="Right"/>
         </Grid>
 
-        <!-- Gros bouton d'action -->
         <Button Name="BtnInstall" Grid.Row="4" Content="Lancer le déploiement des éléments sélectionnés" Style="{StaticResource PrimaryButton}" Height="48" Margin="0,16,0,0"/>
 
-        <!-- Logs de déploiement dépliables -->
         <StackPanel Grid.Row="5" Margin="0,14,0,0">
             <Expander Header="Afficher la console technique" Foreground="{StaticResource BrandGray}" FontSize="12" FontWeight="SemiBold">
                 <Border BorderBrush="{StaticResource BorderGray}" BorderThickness="1" CornerRadius="8" Background="#F8FAFC" Margin="0,6,0,0">
@@ -227,8 +218,14 @@ if (-not $apps -or $apps.Count -eq 0) {
 </Window>
 '@
 
-$reader = New-Object System.Xml.XmlNodeReader $xaml
-$window = [Windows.Markup.XamlReader]::Load($reader)
+# Chargement sécurisé de la fenêtre
+try {
+    $reader = New-Object System.Xml.XmlNodeReader $xaml
+    $window = [Windows.Markup.XamlReader]::Load($reader)
+} catch {
+    [System.Windows.MessageBox]::Show("Erreur critique lors de l'initialisation de l'interface graphique XAML :`n`n$($_.Exception.Message)", "Météris Informatique - Erreur")
+    exit
+}
 
 $LogoImage           = $window.FindName("LogoImage")
 $CategoriesContainer = $window.FindName("CategoriesContainer")
@@ -241,10 +238,13 @@ $BtnInstall          = $window.FindName("BtnInstall")
 $LogBox              = $window.FindName("LogBox")
 
 # =========================
-# CHARGEMENT SÉCURISÉ DU LOGO
+# CHARGEMENT SÉCURISÉ DU LOGO (.NET HttpClient)
 # =========================
 try {
-    $logoBytes = Invoke-WebRequest -Uri $logoUrl -UseBasicParsing -TimeoutSec 5 | Select-Object -ExpandProperty Content
+    $httpClient = New-Object System.Net.Http.HttpClient
+    $responseTask = $httpClient.GetByteArrayAsync($logoUrl)
+    $logoBytes = $responseTask.GetAwaiter().GetResult()
+    
     $ms = New-Object System.IO.MemoryStream(,$logoBytes)
     $bmp = New-Object System.Windows.Media.Imaging.BitmapImage
     $bmp.BeginInit()
@@ -252,8 +252,10 @@ try {
     $bmp.StreamSource = $ms
     $bmp.EndInit()
     $bmp.Freeze()
+    
     $LogoImage.Source = $bmp
     $window.Icon = $bmp
+    $httpClient.Dispose()
 }
 catch {
     $LogoImage.Visibility = "Collapsed"
@@ -267,7 +269,7 @@ $brushGray  = [System.Windows.Media.SolidColorBrush]::new([System.Windows.Media.
 $brushText  = [System.Windows.Media.SolidColorBrush]::new([System.Windows.Media.Color]::FromRgb(15,23,42))
 
 # =========================
-# GÉNÉRATION DYNAMIQUE (Par Catégorie & Ordre Alpha)
+# GÉNÉRATION DYNAMIQUE PAR CATÉGORIES & TRI ALPHA
 # =========================
 $rows = @()
 $categoriesGrouped = $apps | Group-Object category | Sort-Object Name
@@ -275,7 +277,6 @@ $categoriesGrouped = $apps | Group-Object category | Sort-Object Name
 foreach ($cat in $categoriesGrouped) {
     $catName = if ([string]::IsNullOrEmpty($cat.Name)) { "Divers" } else { $cat.Name }
     
-    # Card de catégorie
     $catCard = New-Object System.Windows.Controls.Border
     $catCard.Background = [System.Windows.Media.Brushes]::White
     $catCard.BorderBrush = [System.Windows.Media.SolidColorBrush]::new([System.Windows.Media.Color]::FromRgb(226,232,240))
@@ -286,7 +287,6 @@ foreach ($cat in $categoriesGrouped) {
 
     $catStack = New-Object System.Windows.Controls.StackPanel
 
-    # Titre de catégorie
     $catHeader = New-Object System.Windows.Controls.TextBlock
     $catHeader.Text = $catName.ToUpper()
     $catHeader.FontSize = 12
@@ -297,7 +297,6 @@ foreach ($cat in $categoriesGrouped) {
 
     $appsStack = New-Object System.Windows.Controls.StackPanel
 
-    # Tri alphabétique des logiciels dans la catégorie
     $sortedApps = $cat.Group | Sort-Object name
     foreach ($app in $sortedApps) {
         
@@ -353,12 +352,10 @@ foreach ($cat in $categoriesGrouped) {
 }
 
 # =========================
-# FONCTIONNALITÉS FILTRE / RECHERCHE
+# RECHERCHE / FILTRES
 # =========================
 $SearchBox.Add_TextChanged({
     $term = $SearchBox.Text.Trim().ToLower()
-    
-    # 1. Filtrer les lignes individuelles
     foreach ($row in $rows) {
         if ($term -eq "" -or $row.Name.ToLower().Contains($term)) {
             $row.ItemBorder.Visibility = "Visible"
@@ -366,8 +363,6 @@ $SearchBox.Add_TextChanged({
             $row.ItemBorder.Visibility = "Collapsed"
         }
     }
-    
-    # 2. Masquer les blocs de catégories vides de résultats
     foreach ($catCard in $CategoriesContainer.Children) {
         $stack = $catCard.Child
         $appsStack = $stack.Children[1]
@@ -557,6 +552,6 @@ $BtnInstall.Add_Click({
 })
 
 # =========================
-# RENDER
+# AFFICHAGE FENÊTRE
 # =========================
 $window.ShowDialog() | Out-Null
