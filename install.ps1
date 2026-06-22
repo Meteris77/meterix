@@ -441,7 +441,7 @@ $BtnInstall.Add_Click({
     $timer = New-Object System.Windows.Threading.DispatcherTimer
     $timer.Interval = [TimeSpan]::FromMilliseconds(200)
 
-    $timer.Add_Tick({
+    $tickHandler = {
         $ProgressBarCtrl.Maximum = [Math]::Max($sync.Total, 1)
         $ProgressBarCtrl.Value   = $sync.Index
         $ProgressText.Text      = "$($sync.Index) / $($sync.Total)"
@@ -485,7 +485,9 @@ $BtnInstall.Add_Click({
                 [System.Windows.MessageBoxImage]::Information
             )
         }
-    })
+    }.GetNewClosure()
+
+    $timer.Add_Tick($tickHandler)
 
     $timer.Start()
 })
