@@ -10,7 +10,7 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 # =========================
 $repoBase   = "https://raw.githubusercontent.com/Meteris77/meterix/main"
 $appsUrl    = "$repoBase/apps.json"
-$logoUrl    = "$repoBase/logo.png"
+$logoUrl    = "$repoBase/Logo.png"  <# Corrigé avec la majuscule ! #>
 $selfUrl    = "$repoBase/install.ps1"
 
 # =========================
@@ -125,7 +125,7 @@ if (-not $apps -or $apps.Count -eq 0) {
                     <Setter Property="BorderBrush" Value="{StaticResource BrandBlue}"/>
                 </Trigger>
                 <Trigger Property="IsEnabled" Value="False">
-                    <Setter Property="Foreground" Value="#CBD5E1"/>
+                    <Foreground Value="#CBD5E1"/>
                     <Setter Property="BorderBrush" Value="#E2E8F0"/>
                 </Trigger>
             </Style.Triggers>
@@ -371,8 +371,6 @@ $installWorker = {
                     "--accept-source-agreements","--accept-package-agreements",
                     "--force"
                 ) -Wait -PassThru -WindowStyle Hidden
-                
-                # Prise en compte du code 0 (Succès) et -1978335189 (Déjà installé)
                 if ($p.ExitCode -eq 0 -or $p.ExitCode -eq -1978335189) { $ok = $true }
                 else { Add-Log $sync "winget a retourné le code $($p.ExitCode) pour $($app.Name)." }
             }
@@ -481,7 +479,7 @@ $BtnInstall.Add_Click({
                 switch ($evt.Status) {
                     "installing" { $row.StatusText.Text = "Installation..." ; $row.StatusText.Foreground = $brushBlue }
                     "ok"         { $row.StatusText.Text = "Installé"        ; $row.StatusText.Foreground = $brushGreen }
-                    "error"      { $row.StatusText.Text = "Erreur"          ; $row.StatusText.Foreground = $brushRed }
+                    "error" { $row.StatusText.Text = "Erreur" ; $row.StatusText.Foreground = $brushRed }
                 }
             }
             $sync.ConsumedStatus++
