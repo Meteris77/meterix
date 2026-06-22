@@ -1,5 +1,5 @@
 <#
-    Meterix Installer - Météris Informatique
+    Météris Installer - Météris Informatique
     Lancement : irm https://raw.githubusercontent.com/Meteris77/meterix/main/install.ps1 | iex
 #>
 
@@ -21,7 +21,7 @@ $isAdmin = $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::A
 
 if (-not $isAdmin) {
     $relaunch = [System.Windows.MessageBox]::Show(
-        "Meterix Installer fonctionne mieux avec des droits administrateur (certaines installations peuvent échouer sans cela).`n`nRelancer en tant qu'administrateur ?",
+        "Météris Installer fonctionne mieux avec des droits administrateur (certaines installations peuvent échouer sans cela).`n`nRelancer en tant qu'administrateur ?",
         "Météris Informatique",
         [System.Windows.MessageBoxButton]::YesNo,
         [System.Windows.MessageBoxImage]::Warning
@@ -60,7 +60,7 @@ if (-not $apps -or $apps.Count -eq 0) {
 [xml]$xaml = @'
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Météris Informatique - Meterix Installer"
+        Title="Météris Informatique - Météris Installer"
         Height="750" Width="580"
         MinHeight="650" MinWidth="500"
         WindowStartupLocation="CenterScreen"
@@ -168,7 +168,7 @@ if (-not $apps -or $apps.Count -eq 0) {
                 <Image Name="LogoImage" Grid.Column="0" Width="64" Height="64" Margin="0,0,16,0" RenderOptions.BitmapScalingMode="HighQuality"/>
                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
                     <TextBlock Text="Météris Informatique" FontSize="24" FontWeight="Bold" Foreground="{StaticResource BrandBlue}"/>
-                    <TextBlock Text="Meterix Installer — Déploiement Automatisé" FontSize="13" Foreground="{StaticResource BrandGray}" Margin="0,2,0,0"/>
+                    <TextBlock Text="Météris Installer — Déploiement Automatisé" FontSize="13" Foreground="{StaticResource BrandGray}" Margin="0,2,0,0"/>
                 </StackPanel>
             </Grid>
         </Border>
@@ -371,7 +371,9 @@ $installWorker = {
                     "--accept-source-agreements","--accept-package-agreements",
                     "--force"
                 ) -Wait -PassThru -WindowStyle Hidden
-                if ($p.ExitCode -eq 0) { $ok = $true }
+                
+                # Prise en compte du code 0 (Succès) et -1978335189 (Déjà installé)
+                if ($p.ExitCode -eq 0 -or $p.ExitCode -eq -1978335189) { $ok = $true }
                 else { Add-Log $sync "winget a retourné le code $($p.ExitCode) pour $($app.Name)." }
             }
             catch {
@@ -498,7 +500,6 @@ $BtnInstall.Add_Click({
             $BtnSelectNone.IsEnabled = $true
             $SearchBox.IsEnabled     = $true
 
-            # Les compteurs utilisent bien @(...) pour l'affichage correct du chiffre 1
             $okCount  = @($rows | Where-Object { $_.StatusText.Text -eq "Installé" }).Count
             $errCount = @($rows | Where-Object { $_.StatusText.Text -eq "Erreur" }).Count
 
