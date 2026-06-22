@@ -1,6 +1,6 @@
 <#
     Météris Installer - Météris Informatique
-    Lancement : irm is.gd/Meteris | iex
+    Lancement : irm https://raw.githubusercontent.com/Meteris77/meterix/main/install.ps1 | iex
 #>
 
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
@@ -14,7 +14,7 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 $repoBase   = "https://raw.githubusercontent.com/Meteris77/meterix/main"
 $appsUrl    = "$repoBase/apps.json"
 $logoUrl    = "$repoBase/logo.png"
-$selfUrl    = "https://is.gd/Meteris"
+$selfUrl    = "https://raw.githubusercontent.com/Meteris77/meterix/main/install.ps1"
 
 # =========================
 # DROITS ADMINISTRATEUR
