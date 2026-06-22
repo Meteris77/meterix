@@ -9,6 +9,13 @@
   { "name": "Google Earth Pro", "id": "Google.EarthPro" },
   { "name": "WhatsApp pour Windows", "id": "WhatsApp.WhatsApp" },
 
+  { "name": "WinDirStat (Analyse Disque)", "id": "WinDirStat.WinDirStat" },
+  { "name": "Malwarebytes", "id": "Malwarebytes.Malwarebytes" },
+  { "name": "Zoom", "id": "Zoom.Zoom" },
+  { "name": "Microsoft Teams", "id": "Microsoft.Teams" },
+  { "name": "AnyDesk", "id": "AnyDesk.AnyDesk" },
+  { "name": "Rufus (Boot USB)", "id": "ThomasNavarre.Rufus" },
+
   { "name": "Microsoft Office 365 (Bureau)", "id": "Microsoft.Office" },
   { "name": "Microsoft Office 2024", "id": "Microsoft.Office" },
 
