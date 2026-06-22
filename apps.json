@@ -5,6 +5,10 @@
   { "name": "7-Zip (compression)", "id": "7zip.7zip" },
   { "name": "Adobe Acrobat Reader (PDF)", "id": "Adobe.Acrobat.Reader.64-bit" },
 
+  { "name": "QGIS (SIT / Cartographie)", "id": "QGIS.QGIS" },
+  { "name": "Google Earth Pro", "id": "Google.EarthPro" },
+  { "name": "WhatsApp pour Windows", "id": "WhatsApp.WhatsApp" },
+
   { "name": "Microsoft Office 365 (Bureau)", "id": "Microsoft.Office" },
   { "name": "Microsoft Office 2024", "id": "Microsoft.Office" },
 
