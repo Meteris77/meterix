@@ -55,22 +55,23 @@ if (-not $apps -or $apps.Count -eq 0) {
 }
 
 # =========================
-# INTERFACE (WPF)
+# INTERFACE (WPF - Charte Météris Améliorée)
 # =========================
 [xml]$xaml = @'
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Météris Informatique - Meterix Installer"
-        Height="720" Width="560"
-        MinHeight="600" MinWidth="480"
+        Height="750" Width="580"
+        MinHeight="650" MinWidth="500"
         WindowStartupLocation="CenterScreen"
-        Background="#FFF7F9FB"
+        Background="#FFF4F7FA"
         FontFamily="Segoe UI">
     <Window.Resources>
         <SolidColorBrush x:Key="BrandBlue" Color="#0081B9"/>
         <SolidColorBrush x:Key="BrandBlueDark" Color="#00608A"/>
-        <SolidColorBrush x:Key="BrandGray" Color="#666666"/>
-        <SolidColorBrush x:Key="BorderGray" Color="#E2E5E9"/>
+        <SolidColorBrush x:Key="BrandGray" Color="#556575"/>
+        <SolidColorBrush x:Key="BorderGray" Color="#D1D9E0"/>
+        <SolidColorBrush x:Key="BgLight" Color="#FFFFFF"/>
 
         <Style x:Key="PrimaryButton" TargetType="Button">
             <Setter Property="Background" Value="{StaticResource BrandBlue}"/>
@@ -79,11 +80,11 @@ if (-not $apps -or $apps.Count -eq 0) {
             <Setter Property="FontSize" Value="14"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Padding" Value="14,8"/>
+            <Setter Property="Padding" Value="16,10"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}" CornerRadius="5" Padding="{TemplateBinding Padding}">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                     </ControlTemplate>
@@ -94,7 +95,8 @@ if (-not $apps -or $apps.Count -eq 0) {
                     <Setter Property="Background" Value="{StaticResource BrandBlueDark}"/>
                 </Trigger>
                 <Trigger Property="IsEnabled" Value="False">
-                    <Setter Property="Background" Value="#C2C2C2"/>
+                    <Setter Property="Background" Value="#CBD5E1"/>
+                    <Setter Property="Foreground" Value="#94A3B8"/>
                 </Trigger>
             </Style.Triggers>
         </Style>
@@ -103,14 +105,15 @@ if (-not $apps -or $apps.Count -eq 0) {
             <Setter Property="Background" Value="White"/>
             <Setter Property="Foreground" Value="{StaticResource BrandGray}"/>
             <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="Medium"/>
             <Setter Property="BorderBrush" Value="{StaticResource BorderGray}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Padding" Value="10,6"/>
+            <Setter Property="Padding" Value="12,6"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6" Padding="{TemplateBinding Padding}">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                     </ControlTemplate>
@@ -118,16 +121,34 @@ if (-not $apps -or $apps.Count -eq 0) {
             </Setter>
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="#EFF3F6"/>
+                    <Setter Property="Background" Value="#F1F5F9"/>
+                    <Setter Property="BorderBrush" Value="{StaticResource BrandBlue}"/>
                 </Trigger>
                 <Trigger Property="IsEnabled" Value="False">
-                    <Setter Property="Foreground" Value="#BBBBBB"/>
+                    <Setter Property="Foreground" Value="#CBD5E1"/>
+                    <Setter Property="BorderBrush" Value="#E2E8F0"/>
                 </Trigger>
             </Style.Triggers>
         </Style>
+
+        <Style TargetType="ProgressBar">
+            <Setter Property="Foreground" Value="{StaticResource BrandBlue}"/>
+            <Setter Property="Background" Value="#E2E8F0"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ProgressBar">
+                        <Grid MinHeight="14">
+                            <Border Name="PART_Track" Background="{TemplateBinding Background}" CornerRadius="4"/>
+                            <Border Name="PART_Indicator" Background="{TemplateBinding Foreground}" CornerRadius="4" HorizontalAlignment="Left"/>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
-    <Grid Margin="22">
+    <Grid Margin="24">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
@@ -138,60 +159,61 @@ if (-not $apps -or $apps.Count -eq 0) {
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- En-tete -->
-        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,16">
-            <Image Name="LogoImage" Width="58" Height="58" Margin="0,0,14,0"/>
-            <StackPanel VerticalAlignment="Center">
-                <TextBlock Text="Météris Informatique" FontSize="21" FontWeight="Bold" Foreground="{StaticResource BrandBlue}"/>
-                <TextBlock Text="Meterix Installer" FontSize="13" Foreground="{StaticResource BrandGray}"/>
-            </StackPanel>
-        </StackPanel>
+        <Border Grid.Row="0" Background="White" CornerRadius="8" Padding="16" Margin="0,0,0,16" BorderBrush="#E2E8F0" BorderThickness="1">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Image Name="LogoImage" Grid.Column="0" Width="64" Height="64" Margin="0,0,16,0" RenderOptions.BitmapScalingMode="HighQuality"/>
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock Text="Météris Informatique" FontSize="24" FontWeight="Bold" Foreground="{StaticResource BrandBlue}"/>
+                    <TextBlock Text="Meterix Installer — Déploiement Automatisé" FontSize="13" Foreground="{StaticResource BrandGray}" Margin="0,2,0,0"/>
+                </StackPanel>
+            </Grid>
+        </Border>
 
-        <!-- Sous-titre -->
-        <TextBlock Grid.Row="1" Text="Sélectionnez les logiciels à installer, puis cliquez sur Installer la sélection."
-                   FontSize="12" Foreground="{StaticResource BrandGray}" TextWrapping="Wrap" Margin="0,0,0,12"/>
+        <TextBlock Grid.Row="1" Text="Cochez les applications nécessaires à la configuration de ce poste, puis lancez l'installation."
+                   FontSize="13" Foreground="{StaticResource BrandGray}" TextWrapping="Wrap" Margin="4,0,4,14"/>
 
-        <!-- Recherche + selection -->
-        <Grid Grid.Row="2" Margin="0,0,0,10">
+        <Grid Grid.Row="2" Margin="0,0,0,12">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
-            <TextBox Name="SearchBox" Grid.Column="0" Height="32" Padding="8,5"
-                     VerticalContentAlignment="Center" BorderBrush="{StaticResource BorderGray}" Margin="0,0,8,0"/>
-            <Button Name="BtnSelectAll" Grid.Column="1" Content="Tout sélectionner" Style="{StaticResource SecondaryButton}" Margin="0,0,6,0"/>
-            <Button Name="BtnSelectNone" Grid.Column="2" Content="Tout désélectionner" Style="{StaticResource SecondaryButton}"/>
+            <Border Grid.Column="0" BorderBrush="{StaticResource BorderGray}" BorderThickness="1" CornerRadius="6" Background="White" Margin="0,0,8,0" Height="34">
+                <TextBox Name="SearchBox" BorderThickness="0" Background="Transparent" Padding="8,0" VerticalContentAlignment="Center" FontSize="13"/>
+            </Border>
+            <Button Name="BtnSelectAll" Grid.Column="1" Content="Tout sélectionner" Style="{StaticResource SecondaryButton}" Margin="0,0,6,0" Height="34"/>
+            <Button Name="BtnSelectNone" Grid.Column="2" Content="Tout désélectionner" Style="{StaticResource SecondaryButton}" Height="34"/>
         </Grid>
 
-        <!-- Liste des applications -->
-        <Border Grid.Row="3" BorderBrush="{StaticResource BorderGray}" BorderThickness="1" Background="White" CornerRadius="5">
-            <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="6">
+        <Border Grid.Row="3" BorderBrush="{StaticResource BorderGray}" BorderThickness="1" Background="White" CornerRadius="8">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="8">
                 <StackPanel Name="AppListPanel"/>
             </ScrollViewer>
         </Border>
 
-        <!-- Progression -->
-        <Grid Grid.Row="4" Margin="0,14,0,0">
+        <Grid Grid.Row="4" Margin="4,16,4,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
-            <ProgressBar Name="ProgressBarCtrl" Grid.Column="0" Height="16" Minimum="0" Margin="0,0,10,0"/>
-            <TextBlock Name="ProgressText" Grid.Column="1" Text="" VerticalAlignment="Center" Foreground="{StaticResource BrandGray}" FontSize="12" MinWidth="70"/>
+            <ProgressBar Name="ProgressBarCtrl" Grid.Column="0" Height="14" Minimum="0"/>
+            <TextBlock Name="ProgressText" Grid.Column="1" Text="" VerticalAlignment="Center" Foreground="{StaticResource BrandGray}" FontWeight="SemiBold" FontSize="13" MinWidth="75" Margin="12,0,0,0" HorizontalAlignment="Right"/>
         </Grid>
 
-        <!-- Bouton installer -->
-        <Button Name="BtnInstall" Grid.Row="5" Content="Installer la sélection" Style="{StaticResource PrimaryButton}" Height="44" Margin="0,12,0,0"/>
+        <Button Name="BtnInstall" Grid.Row="5" Content="Lancer l'installation de la sélection" Style="{StaticResource PrimaryButton}" Height="46" Margin="0,14,0,0"/>
 
-        <!-- Journal + pied de page -->
-        <StackPanel Grid.Row="6" Margin="0,14,0,0">
-            <Expander Header="Journal d'installation" Foreground="{StaticResource BrandGray}" FontSize="12">
-                <TextBox Name="LogBox" Height="120" IsReadOnly="True" TextWrapping="Wrap"
-                         VerticalScrollBarVisibility="Auto" FontFamily="Consolas" FontSize="11"
-                         Background="#FAFAFA" BorderBrush="{StaticResource BorderGray}" Margin="0,8,0,0"/>
+        <StackPanel Grid.Row="6" Margin="0,16,0,0">
+            <Expander Header="Afficher le journal d'installation" Foreground="{StaticResource BrandGray}" FontSize="12" FontWeight="Medium">
+                <Border BorderBrush="{StaticResource BorderGray}" BorderThickness="1" CornerRadius="6" Background="#FAFAFA" Margin="0,8,0,0">
+                    <TextBox Name="LogBox" Height="130" IsReadOnly="True" TextWrapping="Wrap" BorderThickness="0" Background="Transparent"
+                             VerticalScrollBarVisibility="Auto" FontFamily="Consolas" FontSize="11" Padding="8"/>
+                </Border>
             </Expander>
-            <TextBlock Text="© Météris Informatique" FontSize="10" Foreground="#AAAAAA" HorizontalAlignment="Center" Margin="0,12,0,0"/>
+            <TextBlock Text="© Météris Informatique — support@meteris.fr" FontSize="11" Foreground="#94A3B8" HorizontalAlignment="Center" Margin="0,16,0,0"/>
         </StackPanel>
     </Grid>
 </Window>
@@ -211,32 +233,36 @@ $BtnInstall      = $window.FindName("BtnInstall")
 $LogBox          = $window.FindName("LogBox")
 
 # =========================
-# LOGO
+# CHARGEMENT DU LOGO (Téléchargement synchrone propre)
 # =========================
 try {
-    $logoBytes = (New-Object System.Net.WebClient).DownloadData($logoUrl)
+    $wc = New-Object System.Net.WebClient
+    $logoBytes = $wc.DownloadData($logoUrl)
     $ms = New-Object System.IO.MemoryStream(,$logoBytes)
+    
     $bmp = New-Object System.Windows.Media.Imaging.BitmapImage
     $bmp.BeginInit()
     $bmp.CacheOption = [System.Windows.Media.Imaging.BitmapCacheOption]::OnLoad
     $bmp.StreamSource = $ms
     $bmp.EndInit()
     $bmp.Freeze()
+    
     $LogoImage.Source = $bmp
     $window.Icon = $bmp
 }
 catch {
+    # Si pas d'image ou d'internet, on cache l'image proprement
     $LogoImage.Visibility = "Collapsed"
 }
 
 # =========================
-# COULEURS DE STATUT
+# COULEURS DE STATUT (UI)
 # =========================
 $brushBlue  = [System.Windows.Media.SolidColorBrush]::new([System.Windows.Media.Color]::FromRgb(0,129,185))
-$brushGreen = [System.Windows.Media.SolidColorBrush]::new([System.Windows.Media.Color]::FromRgb(46,125,50))
-$brushRed   = [System.Windows.Media.SolidColorBrush]::new([System.Windows.Media.Color]::FromRgb(198,40,40))
-$brushGray  = [System.Windows.Media.SolidColorBrush]::new([System.Windows.Media.Color]::FromRgb(153,153,153))
-$brushBorder= [System.Windows.Media.SolidColorBrush]::new([System.Windows.Media.Color]::FromRgb(226,229,233))
+$brushGreen = [System.Windows.Media.SolidColorBrush]::new([System.Windows.Media.Color]::FromRgb(34,197,94))
+$brushRed   = [System.Windows.Media.SolidColorBrush]::new([System.Windows.Media.Color]::FromRgb(239,68,68))
+$brushGray  = [System.Windows.Media.SolidColorBrush]::new([System.Windows.Media.Color]::FromRgb(100,116,139))
+$brushBorder= [System.Windows.Media.SolidColorBrush]::new([System.Windows.Media.Color]::FromRgb(241,245,249))
 
 # =========================
 # CONSTRUCTION DE LA LISTE
@@ -248,13 +274,13 @@ foreach ($app in $apps) {
     $rowBorder = New-Object System.Windows.Controls.Border
     $rowBorder.BorderBrush = $brushBorder
     $rowBorder.BorderThickness = "0,0,0,1"
-    $rowBorder.Padding = "4,6"
+    $rowBorder.Padding = "6,8"
 
     $rowGrid = New-Object System.Windows.Controls.Grid
     $colMain = New-Object System.Windows.Controls.ColumnDefinition
     $colMain.Width = [System.Windows.GridLength]::new(1, [System.Windows.GridUnitType]::Star)
     $colStatus = New-Object System.Windows.Controls.ColumnDefinition
-    $colStatus.Width = [System.Windows.GridLength]::new(110)
+    $colStatus.Width = [System.Windows.GridLength]::new(120)
     [void]$rowGrid.ColumnDefinitions.Add($colMain)
     [void]$rowGrid.ColumnDefinitions.Add($colStatus)
 
@@ -262,12 +288,14 @@ foreach ($app in $apps) {
     $cb.Content = $app.name
     $cb.FontSize = 14
     $cb.VerticalAlignment = "Center"
+    $cb.Cursor = "Hand"
     [System.Windows.Controls.Grid]::SetColumn($cb, 0)
     [void]$rowGrid.Children.Add($cb)
 
     $statusText = New-Object System.Windows.Controls.TextBlock
     $statusText.Text = ""
     $statusText.FontSize = 12
+    $statusText.FontWeight = "SemiBold"
     $statusText.HorizontalAlignment = "Right"
     $statusText.VerticalAlignment = "Center"
     $statusText.Foreground = $brushGray
@@ -305,7 +333,7 @@ $SearchBox.Add_TextChanged({
 })
 
 # =========================
-# TOUT SELECTIONNER / DESELECTIONNER
+# SELECTION AUTOMATIQUE
 # =========================
 $BtnSelectAll.Add_Click({
     foreach ($row in $rows) {
@@ -319,7 +347,7 @@ $BtnSelectNone.Add_Click({
 })
 
 # =========================
-# LOGIQUE D'INSTALLATION (execution en arriere-plan)
+# LOGIQUE D'INSTALLATION ARRIERE-PLAN
 # =========================
 $installWorker = {
     param($itemsData, $sync)
@@ -397,17 +425,15 @@ $installWorker = {
 }
 
 # =========================
-# CLIC SUR "INSTALLER LA SELECTION"
+# DECLENCHEMENT INSTALLATION
 # =========================
 $BtnInstall.Add_Click({
-
     $selected = $rows | Where-Object { $_.cb.IsChecked -eq $true }
     if (-not $selected -or $selected.Count -eq 0) {
         [System.Windows.MessageBox]::Show("Sélectionnez au moins un logiciel à installer.", "Météris Informatique")
         return
     }
 
-    # Reinitialisation visuelle
     foreach ($row in $rows) { $row.StatusText.Text = "" ; $row.StatusText.Foreground = $brushGray }
     foreach ($row in $selected) { $row.StatusText.Text = "En attente" }
     $LogBox.Text = ""
@@ -439,12 +465,12 @@ $BtnInstall.Add_Click({
     $asyncHandle = $ps.BeginInvoke()
 
     $timer = New-Object System.Windows.Threading.DispatcherTimer
-    $timer.Interval = [TimeSpan]::FromMilliseconds(200)
+    $timer.Interval = [TimeSpan]::FromMilliseconds(150)
 
     $tickHandler = {
         $ProgressBarCtrl.Maximum = [Math]::Max($sync.Total, 1)
         $ProgressBarCtrl.Value   = $sync.Index
-        $ProgressText.Text      = "$($sync.Index) / $($sync.Total)"
+        $ProgressText.Text       = "$($sync.Index) / $($sync.Total)"
 
         while ($sync.ConsumedStatus -lt $sync.StatusEvents.Count) {
             $evt = $sync.StatusEvents[$sync.ConsumedStatus]
@@ -488,11 +514,10 @@ $BtnInstall.Add_Click({
     }.GetNewClosure()
 
     $timer.Add_Tick($tickHandler)
-
     $timer.Start()
 })
 
 # =========================
-# AFFICHAGE
+# AFFICHAGE DE LA FENETRE
 # =========================
 $window.ShowDialog() | Out-Null
