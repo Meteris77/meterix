@@ -1,6 +1,6 @@
 <#
     Météris Installer - Météris Informatique
-    Lancement : irm https://raw.githubusercontent.com/Meteris77/meterix/main/install.ps1 | iex
+    Lancement : irm is.gd/Meteris | iex
 #>
 
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
@@ -14,7 +14,7 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 $repoBase   = "https://raw.githubusercontent.com/Meteris77/meterix/main"
 $appsUrl    = "$repoBase/apps.json"
 $logoUrl    = "$repoBase/logo.png"
-$selfUrl    = "$repoBase/install.ps1"
+$selfUrl    = "https://is.gd/Meteris"  # Mis à jour avec ton lien court
 
 # =========================
 # DROITS ADMINISTRATEUR
@@ -48,7 +48,6 @@ if (-not $isAdmin) {
 try {
     $apps = Invoke-RestMethod -Uri $appsUrl
     if ($apps) {
-        # Tri de la liste par ordre alphabétique du nom
         $apps = $apps | Sort-Object name
     }
 }
@@ -185,7 +184,7 @@ if (-not $apps -or $apps.Count -eq 0) {
 
         <Grid Grid.Row="2" Margin="0,0,0,12">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
+                <Definition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
@@ -379,7 +378,6 @@ $installWorker = {
                     "--force"
                 ) -Wait -PassThru -WindowStyle Hidden
                 
-                # Prise en compte du code 0 (Succès) et -1978335189 (Déjà installé)
                 if ($p.ExitCode -eq 0 -or $p.ExitCode -eq -1978335189) { $ok = $true }
                 else { Add-Log $sync "winget a retourné le code $($p.ExitCode) pour $($app.Name)." }
             }
