@@ -1,30 +1,41 @@
 Add-Type -AssemblyName PresentationFramework
 
-$apps = Invoke-RestMethod "https://raw.githubusercontent.com/Meteris77/meterix/main/apps.json"
+$appsUrl = "https://raw.githubusercontent.com/Meteris77/meterix/main/apps.json"
+
+try {
+    $apps = Invoke-RestMethod -Uri $appsUrl
+}
+catch {
+    [System.Windows.MessageBox]::Show("Erreur chargement apps.json")
+    exit
+}
+
+if (-not $apps) {
+    [System.Windows.MessageBox]::Show("apps.json vide ou introuvable")
+    exit
+}
 
 [xml]$xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        Title="Meterix Installer"
-        Height="520"
-        Width="550"
-        WindowStartupLocation="CenterScreen">
+        Title="Meterix"
+        Height="500"
+        Width="500">
 
     <Grid Margin="10">
         <StackPanel>
 
             <TextBlock Text="Meterix Installer"
-                       FontSize="22"
+                       FontSize="20"
                        FontWeight="Bold"
                        Margin="0,0,0,10"/>
 
-            <ScrollViewer Height="380">
+            <ScrollViewer Height="350">
                 <StackPanel Name="List"/>
             </ScrollViewer>
 
             <Button Name="Install"
-                    Height="40"
-                    Margin="0,10,0,0">
-                Installer sélection
+                    Height="40">
+                Installer
             </Button>
 
         </StackPanel>
@@ -36,7 +47,7 @@ $reader = New-Object System.Xml.XmlNodeReader $xaml
 $window = [Windows.Markup.XamlReader]::Load($reader)
 
 $list = $window.FindName("List")
-$btn = $window.FindName("Install")
+$btn  = $window.FindName("Install")
 
 $items = @()
 
@@ -49,9 +60,8 @@ foreach ($app in $apps) {
     $list.Children.Add($cb)
 
     $items += [PSCustomObject]@{
-        cb  = $cb
-        id  = $app.id
-        url = $app.url
+        cb = $cb
+        id = $app.id
     }
 }
 
@@ -59,23 +69,14 @@ $btn.Add_Click({
 
     foreach ($i in $items) {
 
-        if ($i.cb.IsChecked) {
+        if ($i.cb.IsChecked -eq $true) {
 
-            # CAS 1 : winget
             if ($i.id) {
                 Start-Process "winget" -ArgumentList "install --id $($i.id) -e --silent"
             }
-
-            # CAS 2 : URL directe (exe/msi)
-            if ($i.url) {
-                $file = "$env:TEMP\installfile.exe"
-
-                Invoke-WebRequest $i.url -OutFile $file
-
-                Start-Process $file -Wait
-            }
         }
     }
+
 })
 
 $window.ShowDialog() | Out-Null
