@@ -10,7 +10,7 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 # =========================
 $repoBase   = "https://raw.githubusercontent.com/Meteris77/meterix/main"
 $appsUrl    = "$repoBase/apps.json"
-$logoUrl    = "$repoBase/Logo.png"
+$logoUrl    = "https://raw.githubusercontent.com/Meteris77/meterix/main/Logo.png"
 $selfUrl    = "$repoBase/install.ps1"
 
 # Sécurité TLS pour le téléchargement
@@ -58,7 +58,7 @@ if (-not $apps -or $apps.Count -eq 0) {
 }
 
 # =========================
-# INTERFACE (WPF - Design Premium Corrigé)
+# INTERFACE (WPF - Design Premium sans DataTrigger)
 # =========================
 [xml]$xaml = @'
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -162,19 +162,7 @@ if (-not $apps -or $apps.Count -eq 0) {
             </Grid.ColumnDefinitions>
             <Border Grid.Column="0" BorderBrush="{StaticResource BorderGray}" BorderThickness="1" CornerRadius="6" Background="White" Margin="0,0,8,0" Height="36">
                 <Grid>
-                    <TextBox Name="SearchBox" BorderThickness="0" Background="Transparent" Padding="10,0" VerticalContentAlignment="Center" FontSize="13" Foreground="{StaticResource TextDark}"/>
-                    <TextBlock Text="Rechercher un logiciel..." IsHitTestVisible="False" Foreground="#94A3B8" FontSize="13" VerticalAlignment="Center" Margin="12,0,0,0">
-                        <TextBlock.Style>
-                            <Style TargetType="TextBlock">
-                                <Setter Property="Visibility" Value="Collapsed"/>
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding Text, ElementName=SearchBox}" Value="">
-                                        <Setter Property="Visibility" Value="Visible"/>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </TextBlock.Style>
-                    </TextBlock>
+                    <TextBox Name="SearchBox" BorderThickness="0" Background="Transparent" Padding="10,0" VerticalContentAlignment="Center" FontSize="13" Foreground="{StaticResource TextDark}" Text="Rechercher un logiciel..."/>
                 </Grid>
             </Border>
             <Button Name="BtnSelectAll" Grid.Column="1" Content="Tout cocher" Style="{StaticResource SecondaryButton}" Width="110" Height="36" Margin="0,0,6,0"/>
@@ -218,12 +206,12 @@ if (-not $apps -or $apps.Count -eq 0) {
 </Window>
 '@
 
-# Chargement sécurisé de la fenêtre
+# Chargement de la fenêtre
 try {
     $reader = New-Object System.Xml.XmlNodeReader $xaml
     $window = [Windows.Markup.XamlReader]::Load($reader)
 } catch {
-    [System.Windows.MessageBox]::Show("Erreur critique lors de l'initialisation de l'interface graphique XAML :`n`n$($_.Exception.Message)", "Météris Informatique - Erreur")
+    [System.Windows.MessageBox]::Show("Erreur critique lors de l'initialisation de l'interface graphique :`n`n$($_.Exception.Message)", "Météris Informatique - Erreur")
     exit
 }
 
@@ -238,7 +226,7 @@ $BtnInstall          = $window.FindName("BtnInstall")
 $LogBox              = $window.FindName("LogBox")
 
 # =========================
-# CHARGEMENT SÉCURISÉ DU LOGO (.NET HttpClient)
+# CHARGEMENT SÉCURISÉ DU LOGO
 # =========================
 try {
     $httpClient = New-Object System.Net.Http.HttpClient
@@ -267,6 +255,26 @@ $brushGreen = [System.Windows.Media.SolidColorBrush]::new([System.Windows.Media.
 $brushRed   = [System.Windows.Media.SolidColorBrush]::new([System.Windows.Media.Color]::FromRgb(239,68,68))
 $brushGray  = [System.Windows.Media.SolidColorBrush]::new([System.Windows.Media.Color]::FromRgb(100,116,139))
 $brushText  = [System.Windows.Media.SolidColorBrush]::new([System.Windows.Media.Color]::FromRgb(15,23,42))
+
+# =========================
+# GESTION RECHERCHE (GotFocus / LostFocus / TextChanged)
+# =========================
+$placeholderText = "Rechercher un logiciel..."
+$SearchBox.Foreground = [System.Windows.Media.Brushes]::Gray
+
+$SearchBox.Add_GotFocus({
+    if ($SearchBox.Text -eq $placeholderText) {
+        $SearchBox.Text = ""
+        $SearchBox.Foreground = $brushText
+    }
+})
+
+$SearchBox.Add_LostFocus({
+    if ([string]::IsNullOrWhiteSpace($SearchBox.Text)) {
+        $SearchBox.Text = $placeholderText
+        $SearchBox.Foreground = [System.Windows.Media.Brushes]::Gray
+    }
+})
 
 # =========================
 # GÉNÉRATION DYNAMIQUE PAR CATÉGORIES & TRI ALPHA
@@ -351,11 +359,11 @@ foreach ($cat in $categoriesGrouped) {
     [void]$CategoriesContainer.Children.Add($catCard)
 }
 
-# =========================
-# RECHERCHE / FILTRES
-# =========================
+# Logiciel de filtrage réel
 $SearchBox.Add_TextChanged({
     $term = $SearchBox.Text.Trim().ToLower()
+    if ($term -eq $placeholderText.ToLower()) { $term = "" }
+    
     foreach ($row in $rows) {
         if ($term -eq "" -or $row.Name.ToLower().Contains($term)) {
             $row.ItemBorder.Visibility = "Visible"
