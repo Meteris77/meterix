@@ -67,14 +67,12 @@ if (-not $apps -or $apps.Count -eq 0) {
         Background="#FFF4F7FA"
         FontFamily="Segoe UI">
     <Window.Resources>
-        <!-- Couleurs de la charte Météris -->
         <SolidColorBrush x:Key="BrandBlue" Color="#0081B9"/>
         <SolidColorBrush x:Key="BrandBlueDark" Color="#00608A"/>
         <SolidColorBrush x:Key="BrandGray" Color="#556575"/>
         <SolidColorBrush x:Key="BorderGray" Color="#D1D9E0"/>
         <SolidColorBrush x:Key="BgLight" Color="#FFFFFF"/>
 
-        <!-- Style Bouton Principal -->
         <Style x:Key="PrimaryButton" TargetType="Button">
             <Setter Property="Background" Value="{StaticResource BrandBlue}"/>
             <Setter Property="Foreground" Value="White"/>
@@ -103,7 +101,6 @@ if (-not $apps -or $apps.Count -eq 0) {
             </Style.Triggers>
         </Style>
 
-        <!-- Style Bouton Secondaire -->
         <Style x:Key="SecondaryButton" TargetType="Button">
             <Setter Property="Background" Value="White"/>
             <Setter Property="Foreground" Value="{StaticResource BrandGray}"/>
@@ -134,7 +131,6 @@ if (-not $apps -or $apps.Count -eq 0) {
             </Style.Triggers>
         </Style>
 
-        <!-- Style Barre de progression Flat -->
         <Style TargetType="ProgressBar">
             <Setter Property="Foreground" Value="{StaticResource BrandBlue}"/>
             <Setter Property="Background" Value="#E2E8F0"/>
@@ -163,7 +159,6 @@ if (-not $apps -or $apps.Count -eq 0) {
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- En-tête Météris -->
         <Border Grid.Row="0" Background="White" CornerRadius="8" Padding="16" Margin="0,0,0,16" BorderBrush="#E2E8F0" BorderThickness="1">
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -178,18 +173,15 @@ if (-not $apps -or $apps.Count -eq 0) {
             </Grid>
         </Border>
 
-        <!-- Sous-titre -->
         <TextBlock Grid.Row="1" Text="Cochez les applications nécessaires à la configuration de ce poste, puis lancez l'installation."
                    FontSize="13" Foreground="{StaticResource BrandGray}" TextWrapping="Wrap" Margin="4,0,4,14"/>
 
-        <!-- Barre de recherche et filtres -->
         <Grid Grid.Row="2" Margin="0,0,0,12">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
-            <!-- Zone de recherche design arrondi -->
             <Border Grid.Column="0" BorderBrush="{StaticResource BorderGray}" BorderThickness="1" CornerRadius="6" Background="White" Margin="0,0,8,0" Height="34">
                 <TextBox Name="SearchBox" BorderThickness="0" Background="Transparent" Padding="8,0" VerticalContentAlignment="Center" FontSize="13"/>
             </Border>
@@ -197,14 +189,12 @@ if (-not $apps -or $apps.Count -eq 0) {
             <Button Name="BtnSelectNone" Grid.Column="2" Content="Tout désélectionner" Style="{StaticResource SecondaryButton}" Height="34"/>
         </Grid>
 
-        <!-- Liste des applications -->
         <Border Grid.Row="3" BorderBrush="{StaticResource BorderGray}" BorderThickness="1" Background="White" CornerRadius="8">
             <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="8">
                 <StackPanel Name="AppListPanel"/>
             </ScrollViewer>
         </Border>
 
-        <!-- Zone de Progression -->
         <Grid Grid.Row="4" Margin="4,16,4,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
@@ -214,10 +204,8 @@ if (-not $apps -or $apps.Count -eq 0) {
             <TextBlock Name="ProgressText" Grid.Column="1" Text="" VerticalAlignment="Center" Foreground="{StaticResource BrandGray}" FontWeight="SemiBold" FontSize="13" MinWidth="75" Margin="12,0,0,0" HorizontalAlignment="Right"/>
         </Grid>
 
-        <!-- Bouton d'action principal -->
         <Button Name="BtnInstall" Grid.Row="5" Content="Lancer l'installation de la sélection" Style="{StaticResource PrimaryButton}" Height="46" Margin="0,14,0,0"/>
 
-        <!-- Journal de log et Footer -->
         <StackPanel Grid.Row="6" Margin="0,16,0,0">
             <Expander Header="Afficher le journal d'installation" Foreground="{StaticResource BrandGray}" FontSize="12" FontWeight="Medium">
                 <Border BorderBrush="{StaticResource BorderGray}" BorderThickness="1" CornerRadius="6" Background="#FAFAFA" Margin="0,8,0,0">
@@ -510,7 +498,7 @@ $BtnInstall.Add_Click({
             $BtnSelectNone.IsEnabled = $true
             $SearchBox.IsEnabled     = $true
 
-            # Correction des compteurs ici : @(...) force PowerShell à traiter le résultat comme un tableau
+            # Les compteurs utilisent bien @(...) pour l'affichage correct du chiffre 1
             $okCount  = @($rows | Where-Object { $_.StatusText.Text -eq "Installé" }).Count
             $errCount = @($rows | Where-Object { $_.StatusText.Text -eq "Erreur" }).Count
 
