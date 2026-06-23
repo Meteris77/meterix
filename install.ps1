@@ -357,6 +357,9 @@ $BtnSelectNone.Add_Click({
 $installWorker = {
     param($itemsData, $sync)
 
+    # Forcer TLS 1.2 / 1.3 dans le Thread secondaire
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13
+
     function Add-Status { param($s,$k,$st) [void]$s.StatusEvents.Add(@{ Key = $k; Status = $st }) }
     function Add-Log    { param($s,$m) [void]$s.Log.Add("[" + (Get-Date -Format "HH:mm:ss") + "] " + $m) }
 
@@ -372,9 +375,10 @@ $installWorker = {
 
         if ($app.Id) {
             try {
+                # AJOUT DES PACKAGES AGREEMENTS ET SOURCE AGREEMENTS POUR EVITER LE BLOCAGE SILENCIEUX
                 $p = Start-Process "winget" -ArgumentList @(
-                    "install","--id",$app.Id,"-e","--silent",
-                    "--accept-source-agreements","--accept-package-agreements",
+                    "install", "--id", $app.Id, "-e", "--silent",
+                    "--accept-source-agreements", "--accept-package-agreements",
                     "--force"
                 ) -Wait -PassThru -WindowStyle Hidden
                 
@@ -501,7 +505,7 @@ $BtnInstall.Add_Click({
         if ($sync.Finished) {
             $timer.Stop()
             $BtnInstall.IsEnabled    = $true
-            $BtnSelectAll.IsEnabled  = $true
+            $BtnSelectAll.IsEnabled  =  $true
             $BtnSelectNone.IsEnabled = $true
             $SearchBox.IsEnabled     = $true
 
