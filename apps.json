@@ -4,26 +4,19 @@
   { "name": "Lecteur VLC Média", "id": "VideoLAN.VLC" },
   { "name": "7-Zip (compression)", "id": "7zip.7zip" },
   { "name": "Adobe Acrobat Reader (PDF)", "id": "Adobe.Acrobat.Reader.64-bit" },
-
-  { "name": "QGIS (SIT / Cartographie)", "id": "QGIS.QGIS" },
   { "name": "Google Earth Pro", "id": "Google.EarthPro" },
-  { "name": "WhatsApp pour Windows", "id": "WhatsApp.WhatsApp" },
-
   { "name": "WinDirStat (Analyse Disque)", "id": "WinDirStat.WinDirStat" },
   { "name": "Malwarebytes", "id": "Malwarebytes.Malwarebytes" },
   { "name": "Zoom", "id": "Zoom.Zoom" },
   { "name": "Microsoft Teams", "id": "Microsoft.Teams" },
   { "name": "AnyDesk", "id": "AnyDesk.AnyDesk" },
   { "name": "Rufus (Boot USB)", "id": "ThomasNavarre.Rufus" },
-
   { "name": "Microsoft Office 365 (Bureau)", "id": "Microsoft.Office" },
   { "name": "Microsoft Office 2024", "id": "Microsoft.Office" },
-
   { "name": "Microsoft Project 2013", "id": "Microsoft.Project.2013" },
   { "name": "Microsoft Project 2019", "id": "Microsoft.Project.2019" },
   { "name": "Microsoft Project 2021", "id": "Microsoft.Project.2021" },
   { "name": "Microsoft Project 2024", "id": "Microsoft.Project.2024" },
-
   {
     "name": "Agent Meteris (installation entreprise)",
     "url": "https://support.meteris.fr/api/files/public/6882b7e7bb778fe1aab50c7a/download"
