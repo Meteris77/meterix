@@ -357,7 +357,6 @@ $BtnSelectNone.Add_Click({
 $installWorker = {
     param($itemsData, $sync)
 
-    # Forcer TLS 1.2 / 1.3 dans le Thread secondaire
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13
 
     function Add-Status { param($s,$k,$st) [void]$s.StatusEvents.Add(@{ Key = $k; Status = $st }) }
@@ -373,25 +372,30 @@ $installWorker = {
         Add-Log $sync "Installation de $($app.Name)..."
         $ok = $false
 
+        # --- BLOC DE SECOURS DIRECT SI QGIS, WHATSAPP OU OFFICE BLOQUENT ---
+        $fallbackUrl = $null
+        $fallbackArgs = ""
+        if ($app.Name -match "QGIS") {
+            $fallbackUrl = "https://download.qgis.org/downloads/qgis-osgeo4w-latest-64bit.msi"
+        } elseif ($app.Name -match "WhatsApp") {
+            $fallbackUrl = "https://web.whatsapp.com/desktop/windows/release/x64/WhatsAppSetup.exe"
+        }
+
         if ($app.Id) {
             try {
-                # Première tentative d'installation
                 $p = Start-Process "winget" -ArgumentList @(
                     "install", "--id", $app.Id, "-e", "--silent",
                     "--accept-source-agreements", "--accept-package-agreements",
                     "--force"
                 ) -Wait -PassThru -WindowStyle Hidden
                 
-                # Si l'erreur APPMANAGER_E_SOURCE_CALL_FAILED (-1978335212) survient, on réinitialise les sources
+                # Gestion de l'erreur réseau -1978335212
                 if ($p.ExitCode -eq -1978335212) {
-                    Add-Log $sync "Erreur réseau Winget détectée (-1978335212). Réinitialisation des sources..."
-                    
-                    # Force le reset et la mise à jour des sources de paquets Microsoft
+                    Add-Log $sync "Erreur réseau détectée (-1978335212). Réinitialisation de l'infrastructure Winget..."
                     $null = Start-Process "winget" -ArgumentList @("source", "reset", "--force") -Wait -WindowStyle Hidden
                     $null = Start-Process "winget" -ArgumentList @("source", "update") -Wait -WindowStyle Hidden
                     
-                    # Seconde tentative d'installation après nettoyage réseau
-                    Add-Log $sync "Nouvelle tentative d'installation pour $($app.Name)..."
+                    Add-Log $sync "Seconde tentative via Winget..."
                     $p = Start-Process "winget" -ArgumentList @(
                         "install", "--id", $app.Id, "-e", "--silent",
                         "--accept-source-agreements", "--accept-package-agreements",
@@ -399,52 +403,50 @@ $installWorker = {
                     ) -Wait -PassThru -WindowStyle Hidden
                 }
 
-                if ($p.ExitCode -eq 0 -or $p.ExitCode -eq -1978335189) { $ok = $true }
-                else { Add-Log $sync "winget a retourné le code $($p.ExitCode) pour $($app.Name)." }
+                if ($p.ExitCode -eq 0 -or $p.ExitCode -eq -1978335189) { 
+                    $ok = $true 
+                } else { 
+                    Add-Log $sync "Winget a échoué (Code $($p.ExitCode))."
+                    if ($fallbackUrl) { $app.Url = $fallbackUrl } # Bascule sur le plan B
+                }
             }
             catch {
-                Add-Log $sync "Erreur winget pour $($app.Name) : $($_.Exception.Message)"
+                Add-Log $sync "Erreur critique Winget."
+                if ($fallbackUrl) { $app.Url = $fallbackUrl }
             }
         }
-        elseif ($app.Url) {
+
+        # --- PLAN B : INSTALLATION PAR URL (DÉPLOYÉ SI WINGET ÉCHOUE OU SI ID ABSENT) ---
+        if (-not $ok -and $app.Url) {
+            Add-Log $sync "Déclenchement du plan de secours : Téléchargement direct depuis le site officiel..."
             $ext  = if ($app.Url -match "\.msi(\?.*)?$") { "msi" } else { "exe" }
             $file = Join-Path $env:TEMP ("meterix_{0}.{1}" -f $app.Key, $ext)
             try {
-                Invoke-WebRequest -Uri $app.Url -OutFile $file -UseBasicParsing
-                if (!(Test-Path $file) -or (Get-Item $file).Length -lt 100KB) {
-                    Add-Log $sync "Fichier invalide ou trop petit : $($app.Name)"
-                }
-                else {
+                Invoke-WebRequest -Uri $app.Url -OutFile $file -UseBasicParsing -TimeoutSec 300
+                if ((Test-Path $file) -and (Get-Item $file).Length -gt 100KB) {
                     if ($ext -eq "msi") {
-                        $p = Start-Process "msiexec.exe" -ArgumentList @("/i",$file,"/quiet","/norestart") -Wait -PassThru
+                        $p = Start-Process "msiexec.exe" -ArgumentList @("/i", $file, "/quiet", "/norestart") -Wait -PassThru
+                    } else {
+                        $args = if ($app.Args) { $app.Args } else { "/S" } # Tente un commutateur silencieux générique pour EXE
+                        $p = Start-Process $file -ArgumentList $args -Wait -PassThru
                     }
-                    elseif ($app.Args) {
-                        $p = Start-Process $file -ArgumentList $app.Args -Wait -PassThru
-                    }
-                    else {
-                        $p = Start-Process $file -Wait -PassThru
-                    }
-                    if ($p.ExitCode -eq 0) { $ok = $true }
-                    else { Add-Log $sync "$($app.Name) a retourné le code $($p.ExitCode)." }
+                    if ($p.ExitCode -eq 0 -or $p.ExitCode -eq 3010) { $ok = $true }
                 }
             }
             catch {
-                Add-Log $sync "Erreur téléchargement/installation de $($app.Name) : $($_.Exception.Message)"
+                Add-Log $sync "Échec du plan de secours : $($_.Exception.Message)"
             }
             finally {
                 Remove-Item $file -ErrorAction SilentlyContinue
             }
         }
-        else {
-            Add-Log $sync "Aucune méthode d'installation définie pour $($app.Name)."
-        }
 
         if ($ok) {
             Add-Status $sync $app.Key "ok"
-            Add-Log $sync "$($app.Name) : installation réussie."
-        }
-        else {
+            Add-Log $sync "$($app.Name) : installé avec succès."
+        } else {
             Add-Status $sync $app.Key "error"
+            Add-Log $sync "Échec définitif d'installation pour $($app.Name)."
         }
     }
 
