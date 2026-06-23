@@ -375,13 +375,30 @@ $installWorker = {
 
         if ($app.Id) {
             try {
-                # AJOUT DES PACKAGES AGREEMENTS ET SOURCE AGREEMENTS POUR EVITER LE BLOCAGE SILENCIEUX
+                # Première tentative d'installation
                 $p = Start-Process "winget" -ArgumentList @(
                     "install", "--id", $app.Id, "-e", "--silent",
                     "--accept-source-agreements", "--accept-package-agreements",
                     "--force"
                 ) -Wait -PassThru -WindowStyle Hidden
                 
+                # Si l'erreur APPMANAGER_E_SOURCE_CALL_FAILED (-1978335212) survient, on réinitialise les sources
+                if ($p.ExitCode -eq -1978335212) {
+                    Add-Log $sync "Erreur réseau Winget détectée (-1978335212). Réinitialisation des sources..."
+                    
+                    # Force le reset et la mise à jour des sources de paquets Microsoft
+                    $null = Start-Process "winget" -ArgumentList @("source", "reset", "--force") -Wait -WindowStyle Hidden
+                    $null = Start-Process "winget" -ArgumentList @("source", "update") -Wait -WindowStyle Hidden
+                    
+                    # Seconde tentative d'installation après nettoyage réseau
+                    Add-Log $sync "Nouvelle tentative d'installation pour $($app.Name)..."
+                    $p = Start-Process "winget" -ArgumentList @(
+                        "install", "--id", $app.Id, "-e", "--silent",
+                        "--accept-source-agreements", "--accept-package-agreements",
+                        "--force"
+                    ) -Wait -PassThru -WindowStyle Hidden
+                }
+
                 if ($p.ExitCode -eq 0 -or $p.ExitCode -eq -1978335189) { $ok = $true }
                 else { Add-Log $sync "winget a retourné le code $($p.ExitCode) pour $($app.Name)." }
             }
@@ -505,7 +522,7 @@ $BtnInstall.Add_Click({
         if ($sync.Finished) {
             $timer.Stop()
             $BtnInstall.IsEnabled    = $true
-            $BtnSelectAll.IsEnabled  =  $true
+            $BtnSelectAll.IsEnabled  = $true
             $BtnSelectNone.IsEnabled = $true
             $SearchBox.IsEnabled     = $true
 
