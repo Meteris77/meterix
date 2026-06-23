@@ -372,15 +372,6 @@ $installWorker = {
         Add-Log $sync "Installation de $($app.Name)..."
         $ok = $false
 
-        # --- BLOC DE SECOURS DIRECT SI QGIS, WHATSAPP OU OFFICE BLOQUENT ---
-        $fallbackUrl = $null
-        $fallbackArgs = ""
-        if ($app.Name -match "QGIS") {
-            $fallbackUrl = "https://download.qgis.org/downloads/qgis-osgeo4w-latest-64bit.msi"
-        } elseif ($app.Name -match "WhatsApp") {
-            $fallbackUrl = "https://web.whatsapp.com/desktop/windows/release/x64/WhatsAppSetup.exe"
-        }
-
         if ($app.Id) {
             try {
                 $p = Start-Process "winget" -ArgumentList @(
@@ -389,13 +380,13 @@ $installWorker = {
                     "--force"
                 ) -Wait -PassThru -WindowStyle Hidden
                 
-                # Gestion de l'erreur réseau -1978335212
+                # Correction si erreur réseau Winget détectée
                 if ($p.ExitCode -eq -1978335212) {
-                    Add-Log $sync "Erreur réseau détectée (-1978335212). Réinitialisation de l'infrastructure Winget..."
+                    Add-Log $sync "Erreur réseau détectée (-1978335212). Réinitialisation des index Winget..."
                     $null = Start-Process "winget" -ArgumentList @("source", "reset", "--force") -Wait -WindowStyle Hidden
                     $null = Start-Process "winget" -ArgumentList @("source", "update") -Wait -WindowStyle Hidden
                     
-                    Add-Log $sync "Seconde tentative via Winget..."
+                    Add-Log $sync "Nouvelle tentative via Winget..."
                     $p = Start-Process "winget" -ArgumentList @(
                         "install", "--id", $app.Id, "-e", "--silent",
                         "--accept-source-agreements", "--accept-package-agreements",
@@ -407,18 +398,16 @@ $installWorker = {
                     $ok = $true 
                 } else { 
                     Add-Log $sync "Winget a échoué (Code $($p.ExitCode))."
-                    if ($fallbackUrl) { $app.Url = $fallbackUrl } # Bascule sur le plan B
                 }
             }
             catch {
                 Add-Log $sync "Erreur critique Winget."
-                if ($fallbackUrl) { $app.Url = $fallbackUrl }
             }
         }
 
-        # --- PLAN B : INSTALLATION PAR URL (DÉPLOYÉ SI WINGET ÉCHOUE OU SI ID ABSENT) ---
+        # --- DÉPLOYÉ SI ID ABSENT ---
         if (-not $ok -and $app.Url) {
-            Add-Log $sync "Déclenchement du plan de secours : Téléchargement direct depuis le site officiel..."
+            Add-Log $sync "Téléchargement direct depuis l'URL officielle..."
             $ext  = if ($app.Url -match "\.msi(\?.*)?$") { "msi" } else { "exe" }
             $file = Join-Path $env:TEMP ("meterix_{0}.{1}" -f $app.Key, $ext)
             try {
@@ -427,14 +416,14 @@ $installWorker = {
                     if ($ext -eq "msi") {
                         $p = Start-Process "msiexec.exe" -ArgumentList @("/i", $file, "/quiet", "/norestart") -Wait -PassThru
                     } else {
-                        $args = if ($app.Args) { $app.Args } else { "/S" } # Tente un commutateur silencieux générique pour EXE
+                        $args = if ($app.Args) { $app.Args } else { "/S" }
                         $p = Start-Process $file -ArgumentList $args -Wait -PassThru
                     }
                     if ($p.ExitCode -eq 0 -or $p.ExitCode -eq 3010) { $ok = $true }
                 }
             }
             catch {
-                Add-Log $sync "Échec du plan de secours : $($_.Exception.Message)"
+                Add-Log $sync "Échec du téléchargement : $($_.Exception.Message)"
             }
             finally {
                 Remove-Item $file -ErrorAction SilentlyContinue
