@@ -46,7 +46,7 @@ if (-not $isAdmin) {
 # CHARGEMENT ET TRI DE LA LISTE D'APPLICATIONS
 # =========================
 try {
-    $apps = Invoke-RestMethod -Uri $appsUrl
+    $apps = Invoke-RestMethod -Uri $appsUrl -UseBasicParsing
     if ($apps) {
         $apps = $apps | Sort-Object name
     }
@@ -239,17 +239,16 @@ $BtnInstall      = $window.FindName("BtnInstall")
 $LogBox          = $window.FindName("LogBox")
 
 # =========================
-# CHARGEMENT DU LOGO
+# CHARGEMENT DU LOGO (via Invoke-WebRequest plus propre)
 # =========================
 try {
-    $wc = New-Object System.Net.WebClient
-    $logoBytes = $wc.DownloadData($logoUrl)
-    $ms = New-Object System.IO.MemoryStream(,$logoBytes)
+    $logoTemp = Join-Path $env:TEMP "meteris_logo.png"
+    Invoke-WebRequest -Uri $logoUrl -OutFile $logoTemp -UseBasicParsing -ErrorAction Stop
     
     $bmp = New-Object System.Windows.Media.Imaging.BitmapImage
     $bmp.BeginInit()
     $bmp.CacheOption = [System.Windows.Media.Imaging.BitmapCacheOption]::OnLoad
-    $bmp.StreamSource = $ms
+    $bmp.UriSource = [Uri]$logoTemp
     $bmp.EndInit()
     $bmp.Freeze()
     
@@ -362,15 +361,11 @@ function Write-GuiLog {
 }
 
 # =========================
-# RESOLUTION ROBUSTE DE WINGET (CORRECTIF "ISOLATION")
+# RESOLUTION DE WINGET
 # =========================
-# L'alias "winget" du PATH est en réalité un "App Execution Alias" MSIX qui
-# peut être invisible ou mal résolu dans certains contextes (session élevée
-# via RunAs, automatisation, profil différent, etc.). On contourne le
-# problème en retrouvant le binaire réel via le paquet App Installer.
 function Get-WinGetExePath {
     try {
-        $pkg = Get-AppxPackage -Name "Microsoft.DesktopAppInstaller" -ErrorAction SilentlyContinue |
+        $pkg = Get-AppxPackage -Name "Microsoft.DesktopAppInstaller" -AllUsers -ErrorAction SilentlyContinue |
                Sort-Object -Property Version -Descending | Select-Object -First 1
         if ($pkg -and $pkg.InstallLocation) {
             $candidate = Join-Path $pkg.InstallLocation "winget.exe"
@@ -398,26 +393,9 @@ function Initialize-WinGet {
     }
 
     if (-not $works) {
-        Write-GuiLog "Winget indisponible ou isolé du contexte courant. Tentative de réparation automatique..."
-        try {
-            if (-not (Get-Module -ListAvailable -Name Microsoft.WinGet.Client)) {
-                try { Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction SilentlyContinue } catch {}
-                Install-Module Microsoft.WinGet.Client -Scope CurrentUser -Force -AllowClobber -ErrorAction Stop
-            }
-            Import-Module Microsoft.WinGet.Client -ErrorAction Stop
-            Repair-WinGetPackageManager -Force -ErrorAction Stop
-            Write-GuiLog "Réparation de Winget effectuée."
-        } catch {
-            Write-GuiLog "Réparation automatique de Winget impossible : $($_.Exception.Message)"
-        }
-
-        $exe = Get-WinGetExePath
+        Write-GuiLog "Winget indisponible ou isolé. Tentative de fallback sur la commande système de base..."
+        $exe = "winget"
     }
-
-    if (-not $exe) {
-        Write-GuiLog "ATTENTION : winget.exe introuvable. Seul le repli par téléchargement direct sera utilisé."
-    }
-
     return $exe
 }
 
@@ -425,8 +403,6 @@ function Invoke-WinGetInstall {
     param($wingetExe, $appId)
 
     $stdOut = [System.IO.Path]::GetTempFileName()
-    $stdErr = [System.IO.Path]::GetTempFileName()
-
     $argsList = @(
         "install", "--id", $appId, "-e", "--silent",
         "--accept-source-agreements", "--accept-package-agreements",
@@ -434,20 +410,25 @@ function Invoke-WinGetInstall {
     )
 
     try {
+        # Execution de winget de façon un peu plus souple
         $p = Start-Process -FilePath $wingetExe -ArgumentList $argsList `
-             -Wait -PassThru -WindowStyle Hidden `
-             -RedirectStandardOutput $stdOut -RedirectStandardError $stdErr
+             -Wait -PassThru -WindowStyle Hidden -RedirectStandardOutput $stdOut
 
         $outText = (Get-Content $stdOut -Raw -ErrorAction SilentlyContinue)
-        $errText = (Get-Content $stdErr -Raw -ErrorAction SilentlyContinue)
 
         return [PSCustomObject]@{
             ExitCode = $p.ExitCode
-            Output   = ("$outText`n$errText").Trim()
+            Output   = "$outText".Trim()
+        }
+    }
+    catch {
+        return [PSCustomObject]@{
+            ExitCode = 999
+            Output   = $_.Exception.Message
         }
     }
     finally {
-        Remove-Item $stdOut, $stdErr -ErrorAction SilentlyContinue
+        if (Test-Path $stdOut) { Remove-Item $stdOut -ErrorAction SilentlyContinue }
     }
 }
 
@@ -459,9 +440,7 @@ function Run-InstallationQueue {
 
     Write-GuiLog "Vérification de Winget..."
     $wingetExe = Initialize-WinGet
-    if ($wingetExe) {
-        Write-GuiLog "Winget prêt : $wingetExe"
-    }
+    Write-GuiLog "Appel système Winget configuré."
 
     $total = $selectedItems.Count
     $index = 0
@@ -471,19 +450,22 @@ function Run-InstallationQueue {
 
     foreach ($app in $selectedItems) {
         $index++
-        $ProgressBarCtrl.Value = $index
-        $ProgressText.Text = "$index / $total"
-
-        $row = $rows | Where-Object { $_.Key -eq $app.Key }
-        if ($row) {
-            $row.StatusText.Text = "Installation..."
-            $row.StatusText.Foreground = $brushBlue
-        }
+        
+        # Forcer le rafraîchissement visuel à chaque étape
+        [System.Windows.Threading.Dispatcher]::CurrentDispatcher.Invoke([System.Windows.Threading.DispatcherPriority]::Background, [Action]{
+            $ProgressBarCtrl.Value = $index
+            $ProgressText.Text = "$index / $total"
+            $row = $rows | Where-Object { $_.Key -eq $app.Key }
+            if ($row) {
+                $row.StatusText.Text = "Installation..."
+                $row.StatusText.Foreground = $brushBlue
+            }
+        })
 
         Write-GuiLog "Installation de $($app.Name)..."
         $ok = $false
 
-        if ($app.Id -and $wingetExe) {
+        if ($app.Id) {
             try {
                 $res = Invoke-WinGetInstall -wingetExe $wingetExe -appId $app.Id
 
@@ -491,38 +473,25 @@ function Run-InstallationQueue {
                     $ok = $true
                 } else {
                     Write-GuiLog "Échec Winget (Code: $($res.ExitCode)) pour $($app.Name)."
-                    if ($res.Output) {
-                        Write-GuiLog "Détail Winget : $($res.Output -replace '[\r\n]+', ' ')"
-                    }
-
-                    Write-GuiLog "Réinitialisation des sources Winget et nouvelle tentative..."
-                    $null = Start-Process -FilePath $wingetExe -ArgumentList @("source", "reset", "--force") -Wait -WindowStyle Hidden
-                    $null = Start-Process -FilePath $wingetExe -ArgumentList @("source", "update") -Wait -WindowStyle Hidden
-
+                    # Tentative de reset source rapide si échec réseau winget
+                    $null = Start-Process winget -ArgumentList "source reset --force" -Wait -WindowStyle Hidden
                     $res2 = Invoke-WinGetInstall -wingetExe $wingetExe -appId $app.Id
-                    if ($res2.ExitCode -eq 0 -or $res2.ExitCode -eq -1978335189 -or $res2.ExitCode -eq 3010) {
-                        $ok = $true
-                    } elseif ($res2.Output) {
-                        Write-GuiLog "Détail Winget (2e tentative) : $($res2.Output -replace '[\r\n]+', ' ')"
-                    }
+                    if ($res2.ExitCode -eq 0 -or $res2.ExitCode -eq 3010) { $ok = $true }
                 }
             }
             catch {
-                Write-GuiLog "Erreur d'initialisation de l'outil Winget : $($_.Exception.Message)"
+                Write-GuiLog "Erreur Winget : $($_.Exception.Message)"
             }
-        }
-        elseif ($app.Id -and -not $wingetExe) {
-            Write-GuiLog "Winget indisponible pour $($app.Name), passage au repli direct si possible."
         }
 
         # --- PROTOCOLE DE REPLI EN TÉLÉCHARGEMENT WEB DIRECT ---
         if (-not $ok -and $app.Url) {
-            Write-GuiLog "Déclenchement du repli par téléchargement de l'exécutable..."
+            Write-GuiLog "Déclenchement du repli par téléchargement direct..."
             $ext  = if ($app.Url -match "\.msi(\?.*)?$") { "msi" } else { "exe" }
             $file = Join-Path $env:TEMP ("meterix_{0}.{1}" -f $app.Key, $ext)
             try {
                 Invoke-WebRequest -Uri $app.Url -OutFile $file -UseBasicParsing -TimeoutSec 180
-                if ((Test-Path $file) -and (Get-Item $file).Length -gt 10KB) {
+                if (Test-Path $file) {
                     if ($ext -eq "msi") {
                         $p = Start-Process "msiexec.exe" -ArgumentList @("/i", "`"$file`"", "/quiet", "/norestart") -Wait -PassThru
                     } else {
@@ -533,7 +502,7 @@ function Run-InstallationQueue {
                 }
             }
             catch {
-                Write-GuiLog "Le serveur de téléchargement direct a renvoyé une erreur."
+                Write-GuiLog "Erreur lors du téléchargement/exécution directe."
             }
             finally {
                 if (Test-Path $file) { Remove-Item $file -ErrorAction SilentlyContinue }
@@ -541,37 +510,39 @@ function Run-InstallationQueue {
         }
 
         # --- MISE À JOUR DE L'INTERFACE GLOBALE ---
-        if ($row) {
-            if ($ok) {
-                $row.StatusText.Text = "Installé"
-                $row.StatusText.Foreground = $brushGreen
-                Write-GuiLog "$($app.Name) : Terminé avec succès."
-            } else {
-                $row.StatusText.Text = "Erreur"
-                $row.StatusText.Foreground = $brushRed
-                Write-GuiLog "Échec critique permanent pour $($app.Name)."
+        [System.Windows.Threading.Dispatcher]::CurrentDispatcher.Invoke([System.Windows.Threading.DispatcherPriority]::Background, [Action]{
+            $row = $rows | Where-Object { $_.Key -eq $app.Key }
+            if ($row) {
+                if ($ok) {
+                    $row.StatusText.Text = "Installé"
+                    $row.StatusText.Foreground = $brushGreen
+                    Write-GuiLog "$($app.Name) : Terminé avec succès."
+                } else {
+                    $row.StatusText.Text = "Erreur"
+                    $row.StatusText.Foreground = $brushRed
+                    Write-GuiLog "Échec critique permanent pour $($app.Name)."
+                }
             }
-        }
-        
-        # Permet à la fenêtre WPF de rester fluide et de se redessiner
-        [System.Windows.Threading.Dispatcher]::CurrentDispatcher.Invoke([System.Windows.Threading.DispatcherPriority]::Background, [Action]{})
+        })
     }
 
-    # Restauration des boutons
-    $BtnInstall.IsEnabled    = $true
-    $BtnSelectAll.IsEnabled  = $true
-    $BtnSelectNone.IsEnabled = $true
-    $SearchBox.IsEnabled     = $true
+    # Restauration des boutons sur le thread UI
+    [System.Windows.Threading.Dispatcher]::CurrentDispatcher.Invoke([System.Windows.Threading.DispatcherPriority]::Background, [Action]{
+        $BtnInstall.IsEnabled    = $true
+        $BtnSelectAll.IsEnabled  = $true
+        $BtnSelectNone.IsEnabled = $true
+        $SearchBox.IsEnabled     = $true
 
-    $okCount  = @($rows | Where-Object { $_.StatusText.Text -eq "Installé" }).Count
-    $errCount = @($rows | Where-Object { $_.StatusText.Text -eq "Erreur" }).Count
+        $okCount  = @($rows | Where-Object { $_.StatusText.Text -eq "Installé" }).Count
+        $errCount = @($rows | Where-Object { $_.StatusText.Text -eq "Erreur" }).Count
 
-    [System.Windows.MessageBox]::Show(
-        "Installation terminée.`n`nRéussies : $okCount`nÉchecs : $errCount`n`nConsultez le journal pour le détail.",
-        "Météris Informatique",
-        [System.Windows.MessageBoxButton]::OK,
-        [System.Windows.MessageBoxImage]::Information
-    )
+        [System.Windows.MessageBox]::Show(
+            "Installation terminée.`n`nRéussies : $okCount`nÉchecs : $errCount",
+            "Météris Informatique",
+            [System.Windows.MessageBoxButton]::OK,
+            [System.Windows.MessageBoxImage]::Information
+        )
+    })
 }
 
 # =========================
@@ -597,8 +568,11 @@ $BtnInstall.Add_Click({
         [PSCustomObject]@{ Key = $_.Key; Name = $_.Name; Id = $_.Id; Url = $_.Url; Args = $_.Args }
     }
 
-    # Exécution directe
-    Run-InstallationQueue -selectedItems $itemsData
+    # On utilise un scriptblock asynchrone léger ou l'exécution séquentielle forcée par événement WPF
+    # Pour éviter le freeze complet de l'UI sous iex, on délègue les tâches au dispatcher de manière fluide
+    $window.Dispatcher.BeginInvoke([System.Action]{
+        Run-InstallationQueue -selectedItems $itemsData
+    }) | Out-Null
 })
 
 # =========================
