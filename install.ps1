@@ -380,13 +380,13 @@ $installWorker = {
                     "--force"
                 ) -Wait -PassThru -WindowStyle Hidden
                 
-                # Correction si erreur réseau Winget détectée
-                if ($p.ExitCode -eq -1978335212) {
-                    Add-Log $sync "Erreur réseau détectée (-1978335212). Réinitialisation des index Winget..."
+                # Correction si erreur source introuvable / package inexistant (-1978335212 ou -1978335138)
+                if ($p.ExitCode -eq -1978335212 -or $p.ExitCode -eq -1978335138) {
+                    Add-Log $sync "Problème d'index ou source Winget ($($p.ExitCode)). Réinitialisation forcée..."
                     $null = Start-Process "winget" -ArgumentList @("source", "reset", "--force") -Wait -WindowStyle Hidden
-                    $null = Start-Process "winget" -ArgumentList @("source", "update") -Wait -WindowStyle Hidden
+                    $null = Start-Process "winget" -ArgumentList @("source", "update", "--accept-source-agreements") -Wait -WindowStyle Hidden
                     
-                    Add-Log $sync "Nouvelle tentative via Winget..."
+                    Add-Log $sync "Nouvelle tentative après mise à jour des catalogues..."
                     $p = Start-Process "winget" -ArgumentList @(
                         "install", "--id", $app.Id, "-e", "--silent",
                         "--accept-source-agreements", "--accept-package-agreements",
@@ -401,29 +401,29 @@ $installWorker = {
                 }
             }
             catch {
-                Add-Log $sync "Erreur critique Winget."
+                Add-Log $sync "Erreur critique d'appel à Winget : $($_.Exception.Message)"
             }
         }
 
-        # --- DÉPLOYÉ SI ID ABSENT ---
+        # --- REPLI SI ÉCHEC WINGET (OU SI ID ABSENT) ---
         if (-not $ok -and $app.Url) {
-            Add-Log $sync "Téléchargement direct depuis l'URL officielle..."
+            Add-Log $sync "Tentative de téléchargement direct de repli depuis l'URL..."
             $ext  = if ($app.Url -match "\.msi(\?.*)?$") { "msi" } else { "exe" }
             $file = Join-Path $env:TEMP ("meterix_{0}.{1}" -f $app.Key, $ext)
             try {
                 Invoke-WebRequest -Uri $app.Url -OutFile $file -UseBasicParsing -TimeoutSec 300
                 if ((Test-Path $file) -and (Get-Item $file).Length -gt 100KB) {
                     if ($ext -eq "msi") {
-                        $p = Start-Process "msiexec.exe" -ArgumentList @("/i", $file, "/quiet", "/norestart") -Wait -PassThru
+                        $p = Start-Process "msiexec.exe" -ArgumentList @("/i", $file, "/quiet", "/norestart") -Wait -PassThru -WindowStyle Hidden
                     } else {
                         $args = if ($app.Args) { $app.Args } else { "/S" }
-                        $p = Start-Process $file -ArgumentList $args -Wait -PassThru
+                        $p = Start-Process $file -ArgumentList $args -Wait -PassThru -WindowStyle Hidden
                     }
                     if ($p.ExitCode -eq 0 -or $p.ExitCode -eq 3010) { $ok = $true }
                 }
             }
             catch {
-                Add-Log $sync "Échec du téléchargement : $($_.Exception.Message)"
+                Add-Log $sync "Échec du téléchargement direct : $($_.Exception.Message)"
             }
             finally {
                 Remove-Item $file -ErrorAction SilentlyContinue
