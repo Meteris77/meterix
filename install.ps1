@@ -1,11 +1,10 @@
 <#
-    Météris Installer - Météris Informatique
+    Météris Installer - Nouvelle Version Ultra-Robuste
     Lancement : irm https://raw.githubusercontent.com/Meteris77/meterix/main/install.ps1 | iex
 #>
 
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 
-# Contexte de sécurité requis pour les requêtes web GitHub
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13
 
 # =========================
@@ -14,149 +13,57 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 $repoBase   = "https://raw.githubusercontent.com/Meteris77/meterix/main"
 $appsUrl    = "$repoBase/apps.json"
 $logoUrl    = "$repoBase/logo.png"
-$selfUrl    = "https://raw.githubusercontent.com/Meteris77/meterix/main/install.ps1"
+$selfUrl    = "$repoBase/install.ps1"
 
 # =========================
 # DROITS ADMINISTRATEUR
 # =========================
-$currentPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
-$isAdmin = $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 
 if (-not $isAdmin) {
     $relaunch = [System.Windows.MessageBox]::Show(
-        "Météris Installer fonctionne mieux avec des droits administrateur (certaines installations peuvent échouer sans cela).`n`nRelancer en tant qu'administrateur ?",
+        "Météris Installer requiert des droits administrateur pour installer les logiciels.`n`nRelancer en tant qu'administrateur ?",
         "Météris Informatique",
         [System.Windows.MessageBoxButton]::YesNo,
         [System.Windows.MessageBoxImage]::Warning
     )
     if ($relaunch -eq [System.Windows.MessageBoxResult]::Yes) {
         try {
-            Start-Process powershell -Verb RunAs -ArgumentList @(
-                "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
-                "irm $selfUrl | iex"
-            )
+            Start-Process powershell -Verb RunAs -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", "irm $selfUrl | iex")
             exit
         } catch {
-            [System.Windows.MessageBox]::Show("Impossible de relancer en administrateur. Le programme va continuer sans droits élevés.")
+            [System.Windows.MessageBox]::Show("Droits admin refusés. Fermeture.")
+            exit
         }
+    } else {
+        exit
     }
 }
 
 # =========================
-# CHARGEMENT ET TRI DE LA LISTE D'APPLICATIONS
+# CHARGEMENT DES DONNÉES
 # =========================
 try {
-    $apps = Invoke-RestMethod -Uri $appsUrl -UseBasicParsing
-    if ($apps) {
-        $apps = $apps | Sort-Object name
-    }
-}
-catch {
-    [System.Windows.MessageBox]::Show("Impossible de charger la liste des logiciels (apps.json).`n`n$($_.Exception.Message)", "Météris Informatique - Erreur")
-    exit
-}
-if (-not $apps -or $apps.Count -eq 0) {
-    [System.Windows.MessageBox]::Show("La liste des logiciels est vide.", "Météris Informatique - Erreur")
+    $apps = Invoke-RestMethod -Uri $appsUrl -UseBasicParsing | Sort-Object name
+} catch {
+    [System.Windows.MessageBox]::Show("Impossible de récupérer apps.json :`n$($_.Exception.Message)", "Erreur Réseau")
     exit
 }
 
+# Téléchargement du logo en local pour WPF
+$logoPath = Join-Path $env:TEMP "meteris_logo.png"
+try { Invoke-WebRequest -Uri $logoUrl -OutFile $logoPath -UseBasicParsing -ErrorAction SilentlyContinue } catch {}
+
 # =========================
-# INTERFACE (WPF - Charte Météris)
+# CODE INTERFACE XAML (WPF)
 # =========================
-[xml]$xaml = @'
+$xamlCode = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Météris Informatique - Météris Installer"
-        Height="750" Width="580"
-        MinHeight="650" MinWidth="500"
-        WindowStartupLocation="CenterScreen"
-        Background="#FFF4F7FA"
-        FontFamily="Segoe UI">
-    <Window.Resources>
-        <SolidColorBrush x:Key="BrandBlue" Color="#0081B9"/>
-        <SolidColorBrush x:Key="BrandBlueDark" Color="#00608A"/>
-        <SolidColorBrush x:Key="BrandGray" Color="#556575"/>
-        <SolidColorBrush x:Key="BorderGray" Color="#D1D9E0"/>
-        <SolidColorBrush x:Key="BgLight" Color="#FFFFFF"/>
-
-        <Style x:Key="PrimaryButton" TargetType="Button">
-            <Setter Property="Background" Value="{StaticResource BrandBlue}"/>
-            <Setter Property="Foreground" Value="White"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="FontSize" Value="14"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Padding" Value="16,10"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-            <Style.Triggers>
-                <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="{StaticResource BrandBlueDark}"/>
-                </Trigger>
-                <Trigger Property="IsEnabled" Value="False">
-                    <Setter Property="Background" Value="#CBD5E1"/>
-                    <Setter Property="Foreground" Value="#94A3B8"/>
-                </Trigger>
-            </Style.Triggers>
-        </Style>
-
-        <Style x:Key="SecondaryButton" TargetType="Button">
-            <Setter Property="Background" Value="White"/>
-            <Setter Property="Foreground" Value="{StaticResource BrandGray}"/>
-            <Setter Property="FontSize" Value="12"/>
-            <Setter Property="FontWeight" Value="Medium"/>
-            <Setter Property="BorderBrush" Value="{StaticResource BorderGray}"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Padding" Value="12,6"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6" Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-            <Style.Triggers>
-                <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="#F1F5F9"/>
-                    <Setter Property="BorderBrush" Value="{StaticResource BrandBlue}"/>
-                </Trigger>
-                <Trigger Property="IsEnabled" Value="False">
-                    <Setter Property="Foreground" Value="#CBD5E1"/>
-                    <Setter Property="BorderBrush" Value="#E2E8F0"/>
-                </Trigger>
-            </Style.Triggers>
-        </Style>
-
-        <Style TargetType="ProgressBar">
-            <Setter Property="Foreground" Value="{StaticResource BrandBlue}"/>
-            <Setter Property="Background" Value="#E2E8F0"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="ProgressBar">
-                        <Grid MinHeight="14">
-                            <Border Name="PART_Track" Background="{TemplateBinding Background}" CornerRadius="4"/>
-                            <Border Name="PART_Indicator" Background="{TemplateBinding Foreground}" CornerRadius="4" HorizontalAlignment="Left"/>
-                        </Grid>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-    </Window.Resources>
-
-    <Grid Margin="24">
+        Height="720" Width="560" WindowStartupLocation="CenterScreen" Background="#FFF4F7FA" FontFamily="Segoe UI">
+    <Grid Margin="20">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
@@ -165,417 +72,353 @@ if (-not $apps -or $apps.Count -eq 0) {
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <Border Grid.Row="0" Background="White" CornerRadius="8" Padding="16" Margin="0,0,0,16" BorderBrush="#E2E8F0" BorderThickness="1">
+        <!-- Header -->
+        <Border Grid.Row="0" Background="White" CornerRadius="8" Padding="15" Margin="0,0,0,15" BorderBrush="#E2E8F0" BorderThickness="1">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
-                <Image Name="LogoImage" Grid.Column="0" Width="64" Height="64" Margin="0,0,16,0" RenderOptions.BitmapScalingMode="HighQuality"/>
+                <Image Name="LogoImage" Grid.Column="0" Width="50" Height="50" Margin="0,0,15,0"/>
                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                    <TextBlock Text="Météris Informatique" FontSize="24" FontWeight="Bold" Foreground="{StaticResource BrandBlue}"/>
-                    <TextBlock Text="Météris Installer — Déploiement Automatisé" FontSize="13" Foreground="{StaticResource BrandGray}" Margin="0,2,0,0"/>
+                    <TextBlock Text="Météris Informatique" FontSize="20" FontWeight="Bold" Foreground="#0081B9"/>
+                    <TextBlock Text="Météris Installer — Déploiement Centralisé" FontSize="12" Foreground="#556575"/>
                 </StackPanel>
             </Grid>
         </Border>
 
-        <TextBlock Grid.Row="1" Text="Cochez les applications nécessaires à la configuration de ce poste, puis lancez l'installation."
-                   FontSize="13" Foreground="{StaticResource BrandGray}" TextWrapping="Wrap" Margin="4,0,4,14"/>
-
-        <Grid Grid.Row="2" Margin="0,0,0,12">
+        <!-- Recherche rapide -->
+        <Grid Grid.Row="1" Margin="0,0,0,10">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
-            <Border Grid.Column="0" BorderBrush="{StaticResource BorderGray}" BorderThickness="1" CornerRadius="6" Background="White" Margin="0,0,8,0" Height="34">
-                <TextBox Name="SearchBox" BorderThickness="0" Background="Transparent" Padding="8,0" VerticalContentAlignment="Center" FontSize="13"/>
-            </Border>
-            <Button Name="BtnSelectAll" Grid.Column="1" Content="Tout sélectionner" Style="{StaticResource SecondaryButton}" Margin="0,0,6,0" Height="34"/>
-            <Button Name="BtnSelectNone" Grid.Column="2" Content="Tout désélectionner" Style="{StaticResource SecondaryButton}" Height="34"/>
+            <TextBox Name="SearchBox" Grid.Column="0" Height="32" Padding="5,0" VerticalContentAlignment="Center" Margin="0,0,5,0"/>
+            <Button Name="BtnAll" Grid.Column="1" Content="Tout" Width="60" Margin="0,0,5,0"/>
+            <Button Name="BtnNone" Grid.Column="2" Content="Rien" Width="60"/>
         </Grid>
 
-        <Border Grid.Row="3" BorderBrush="{StaticResource BorderGray}" BorderThickness="1" Background="White" CornerRadius="8">
-            <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="8">
-                <StackPanel Name="AppListPanel"/>
+        <!-- Liste des Apps -->
+        <Border Grid.Row="2" BorderBrush="#D1D9E0" BorderThickness="1" Background="White" CornerRadius="6">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="5">
+                <StackPanel Name="AppContainer"/>
             </ScrollViewer>
         </Border>
 
-        <Grid Grid.Row="4" Margin="4,16,4,0">
+        <!-- Barre de progression -->
+        <Grid Grid.Row="3" Margin="0,15,0,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
-            <ProgressBar Name="ProgressBarCtrl" Grid.Column="0" Height="14" Minimum="0"/>
-            <TextBlock Name="ProgressText" Grid.Column="1" Text="" VerticalAlignment="Center" Foreground="{StaticResource BrandGray}" FontWeight="SemiBold" FontSize="13" MinWidth="75" Margin="12,0,0,0" HorizontalAlignment="Right"/>
+            <ProgressBar Name="ProgBar" Height="14" Minimum="0" Maximum="100"/>
+            <TextBlock Name="ProgText" Grid.Column="1" Text="0/0" Margin="10,0,0,0" FontWeight="Bold" Foreground="#556575"/>
         </Grid>
 
-        <Button Name="BtnInstall" Grid.Row="5" Content="Lancer l'installation de la sélection" Style="{StaticResource PrimaryButton}" Height="46" Margin="0,14,0,0"/>
+        <!-- Bouton Principal -->
+        <Button Name="BtnGo" Grid.Row="4" Content="Lancer l'installation" Height="45" Margin="0,15,0,0" 
+                Background="#0081B9" Foreground="White" FontWeight="Bold" FontSize="14">
+            <Button.Resources>
+                <Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style>
+            </Button.Resources>
+        </Button>
 
-        <StackPanel Grid.Row="6" Margin="0,16,0,0">
-            <Expander Header="Afficher le journal d'installation" Foreground="{StaticResource BrandGray}" FontSize="12" FontWeight="Medium">
-                <Border BorderBrush="{StaticResource BorderGray}" BorderThickness="1" CornerRadius="6" Background="#FAFAFA" Margin="0,8,0,0">
-                    <TextBox Name="LogBox" Height="130" IsReadOnly="True" TextWrapping="Wrap" BorderThickness="0" Background="Transparent"
-                             VerticalScrollBarVisibility="Auto" FontFamily="Consolas" FontSize="11" Padding="8"/>
-                </Border>
-            </Expander>
-            <TextBlock Text="© Météris Informatique — support@meteris.fr" FontSize="11" Foreground="#94A3B8" HorizontalAlignment="Center" Margin="0,16,0,0"/>
-        </StackPanel>
+        <!-- Logs -->
+        <Expander Grid.Row="5" Header="Voir le journal" Margin="0,10,0,0" Foreground="#556575">
+            <TextBox Name="LogBox" Height="120" IsReadOnly="True" VerticalScrollBarVisibility="Auto" Background="#FAFAFA" FontFamily="Consolas" FontSize="11" Padding="5" TextWrapping="Wrap"/>
+        </Expander>
     </Grid>
 </Window>
-'@
-
-$reader = New-Object System.Xml.XmlNodeReader $xaml
-$window = [Windows.Markup.XamlReader]::Load($reader)
-
-$LogoImage       = $window.FindName("LogoImage")
-$AppListPanel    = $window.FindName("AppListPanel")
-$SearchBox       = $window.FindName("SearchBox")
-$BtnSelectAll    = $window.FindName("BtnSelectAll")
-$BtnSelectNone   = $window.FindName("BtnSelectNone")
-$ProgressBarCtrl = $window.FindName("ProgressBarCtrl")
-$ProgressText    = $window.FindName("ProgressText")
-$BtnInstall      = $window.FindName("BtnInstall")
-$LogBox          = $window.FindName("LogBox")
+"@
 
 # =========================
-# CHARGEMENT DU LOGO (via Invoke-WebRequest plus propre)
+# SYNCHRONISATION DES THREADS (Runspace Data)
 # =========================
-try {
-    $logoTemp = Join-Path $env:TEMP "meteris_logo.png"
-    Invoke-WebRequest -Uri $logoUrl -OutFile $logoTemp -UseBasicParsing -ErrorAction Stop
-    
-    $bmp = New-Object System.Windows.Media.Imaging.BitmapImage
-    $bmp.BeginInit()
-    $bmp.CacheOption = [System.Windows.Media.Imaging.BitmapCacheOption]::OnLoad
-    $bmp.UriSource = [Uri]$logoTemp
-    $bmp.EndInit()
-    $bmp.Freeze()
-    
-    $LogoImage.Source = $bmp
-    $window.Icon = $bmp
-}
-catch {
-    $LogoImage.Visibility = "Collapsed"
-}
+# On prépare un dictionnaire partagé pour piloter la fenêtre depuis l'arrière-plan sans saccade
+$uiData = [hashtable]::Synchronized(@{
+    Apps     = $apps
+    Logo     = $logoPath
+    Selected = [System.Collections.ArrayList]::new()
+    Logs     = ""
+    Status   = @{} # Stockage dynamique des statuts
+    Progress = 0
+    TotalStr = "0/0"
+    Running  = $false
+    SignalClose = $false
+})
 
 # =========================
-# COULEURS DE STATUT (UI)
+# MOTEUR D'INSTALLATION (Arrière-plan)
 # =========================
-$brushBlue  = [System.Windows.Media.SolidColorBrush]::new([System.Windows.Media.Color]::FromRgb(0,129,185))
-$brushGreen = [System.Windows.Media.SolidColorBrush]::new([System.Windows.Media.Color]::FromRgb(34,197,94))
-$brushRed   = [System.Windows.Media.SolidColorBrush]::new([System.Windows.Media.Color]::FromRgb(239,68,68))
-$brushGray  = [System.Windows.Media.SolidColorBrush]::new([System.Windows.Media.Color]::FromRgb(100,116,139))
-$brushBorder= [System.Windows.Media.SolidColorBrush]::new([System.Windows.Media.Color]::FromRgb(241,245,249))
+$installCode = {
+    param($uiData)
 
-# =========================
-# CONSTRUCTION DE LA LISTE
-# =========================
-$rows = @()
-$idx = 0
-foreach ($app in $apps) {
-
-    $rowBorder = New-Object System.Windows.Controls.Border
-    $rowBorder.BorderBrush = $brushBorder
-    $rowBorder.BorderThickness = "0,0,0,1"
-    $rowBorder.Padding = "6,8"
-
-    $rowGrid = New-Object System.Windows.Controls.Grid
-    $colMain = New-Object System.Windows.Controls.ColumnDefinition
-    $colMain.Width = [System.Windows.GridLength]::new(1, [System.Windows.GridUnitType]::Star)
-    $colStatus = New-Object System.Windows.Controls.ColumnDefinition
-    $colStatus.Width = [System.Windows.GridLength]::new(120)
-    [void]$rowGrid.ColumnDefinitions.Add($colMain)
-    [void]$rowGrid.ColumnDefinitions.Add($colStatus)
-
-    $cb = New-Object System.Windows.Controls.CheckBox
-    $cb.Content = $app.name
-    $cb.FontSize = 14
-    $cb.VerticalAlignment = "Center"
-    $cb.Cursor = "Hand"
-    [System.Windows.Controls.Grid]::SetColumn($cb, 0)
-    [void]$rowGrid.Children.Add($cb)
-
-    $statusText = New-Object System.Windows.Controls.TextBlock
-    $statusText.Text = ""
-    $statusText.FontSize = 12
-    $statusText.FontWeight = "SemiBold"
-    $statusText.HorizontalAlignment = "Right"
-    $statusText.VerticalAlignment = "Center"
-    $statusText.Foreground = $brushGray
-    [System.Windows.Controls.Grid]::SetColumn($statusText, 1)
-    [void]$rowGrid.Children.Add($statusText)
-
-    $rowBorder.Child = $rowGrid
-    [void]$AppListPanel.Children.Add($rowBorder)
-
-    $rows += [PSCustomObject]@{
-        Key        = "$idx"
-        Name       = $app.name
-        Id         = $app.id
-        Url        = $app.url
-        Args       = $app.args
-        cb         = $cb
-        StatusText = $statusText
-        RowPanel   = $rowBorder
+    function Write-Log ($msg) {
+        $time = Get-Date -Format "HH:mm:ss"
+        $uiData.Logs += "[$time] $msg`r`n"
     }
-    $idx++
+
+    # FIX CRITIQUE WINGET : Recréation forcée des sources système manquantes en mode Administrateur
+    function Fix-WingetSources {
+        Write-Log "Vérification de la santé des sources Winget..."
+        # On tente de réinitialiser complètement le gestionnaire de sources officiel
+        $null = Start-Process winget -ArgumentList "source reset --force" -Wait -WindowStyle Hidden -ErrorAction SilentlyContinue
+        $null = Start-Process winget -ArgumentList "source update" -Wait -WindowStyle Hidden -ErrorAction SilentlyContinue
+    }
+
+    try {
+        $list = $uiData.Selected.Clone()
+        $total = $list.Count
+        $current = 0
+        
+        if ($total -eq 0) { return }
+        $uiData.Running = $true
+        
+        # On effectue le correctif de source avant de commencer au cas où un package utilise Winget
+        Fix-WingetSources
+
+        foreach ($app in $list) {
+            $current++
+            $uiData.TotalStr = "$current / $total"
+            $uiData.Progress = ($current / $total) * 100
+            $uiData.Status[$app.id] = "Installation..."
+            
+            Write-Log "Début du traitement pour : $($app.name)"
+            $success = $false
+
+            # --- STRATÉGIE 1 : TÉLÉCHARGEMENT DIRECT (Le plus robuste) ---
+            if ($app.url) {
+                Write-Log "-> Mode direct activé via URL."
+                $ext = if ($app.url -match "\.msi(\?.*)?$") { "msi" } else { "exe" }
+                $tmpFile = Join-Path $env:TEMP "install_$($app.id).$ext"
+                
+                try {
+                    Invoke-WebRequest -Uri $app.Url -OutFile $tmpFile -UseBasicParsing -TimeoutSec 300 -ErrorAction Stop
+                    if (Test-Path $tmpFile) {
+                        Write-Log "Téléchargement terminé. Exécution de l'installeur..."
+                        if ($ext -eq "msi") {
+                            $proc = Start-Process "msiexec.exe" -ArgumentList @("/i", "`"$tmpFile`"", "/quiet", "/norestart") -Wait -PassThru -WindowStyle Hidden
+                        } else {
+                            $args = if ($app.args) { $app.args } else { "/S" }
+                            $proc = Start-Process $tmpFile -ArgumentList $args -Wait -PassThru -WindowStyle Hidden
+                        }
+                        
+                        if ($proc.ExitCode -eq 0 -or $proc.ExitCode -eq 3010) {
+                            $success = $true
+                        } else {
+                            Write-Log "L'installeur direct a retourné le code d'erreur : $($proc.ExitCode)"
+                        }
+                    }
+                } catch {
+                    Write-Log "Échec du téléchargement direct : $($_.Exception.Message)"
+                } finally {
+                    if (Test-Path $tmpFile) { Remove-Item $tmpFile -ErrorAction SilentlyContinue }
+                }
+            }
+
+            # --- STRATÉGIE 2 : REPLI PAR WINGET (Si pas d'URL ou si échec) ---
+            if (-not $success -and $app.id) {
+                Write-Log "-> Tentative via Microsoft Winget (ID: $($app.id))..."
+                
+                # Exécution sécurisée avec acceptation automatique des licences et isolation des erreurs de sources
+                $wingetArgs = "install --id `"$($app.id)`" -e --silent --accept-source-agreements --accept-package-agreements --disable-interactivity --force"
+                $proc = Start-Process winget -ArgumentList $wingetArgs -Wait -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
+                
+                if ($proc -and ($proc.ExitCode -eq 0 -or $proc.ExitCode -eq 3010 -or $proc.ExitCode -eq -1978335189)) {
+                    $success = $true
+                } else {
+                    $code = if ($proc) { $proc.ExitCode } else { "Inconnu" }
+                    Write-Log "Échec Winget. Code retour : $code"
+                }
+            }
+
+            # Enregistrement du résultat final de l'application
+            if ($success) {
+                $uiData.Status[$app.id] = "Installé"
+                Write-Log "Succès pour $($app.name)."
+            } else {
+                $uiData.Status[$app.id] = "Erreur"
+                Write-Log "ÉCHEC permanent pour $($app.name)."
+            }
+        }
+    } catch {
+        Write-Log "Erreur générale critique de la file d'attente : $($_.Exception.Message)"
+    } finally {
+        $uiData.Running = $false
+        $uiData.SignalClose = $true
+    }
 }
 
 # =========================
-# RECHERCHE / FILTRE
+# INITIALISATION DE L'INTERFACE (Thread UI principal)
+# =========================
+$xamlReader = New-Object System.Xml.XmlNodeReader ([xml]$xamlCode)
+$window = [Windows.Markup.XamlReader]::Load($xamlReader)
+
+# Récupération des contrôles
+$LogoImage   = $window.FindName("LogoImage")
+$SearchBox   = $window.FindName("SearchBox")
+$BtnAll      = $window.FindName("BtnAll")
+$BtnNone     = $window.FindName("BtnNone")
+$AppContainer = $window.FindName("AppContainer")
+$ProgBar     = $window.FindName("ProgBar")
+$ProgText    = $window.FindName("ProgText")
+$BtnGo       = $window.FindName("BtnGo")
+$LogBox      = $window.FindName("LogBox")
+
+# Application du logo
+if (Test-Path $uiData.Logo) {
+    try {
+        $bmp = New-Object System.Windows.Media.Imaging.BitmapImage
+        $bmp.BeginInit()
+        $bmp.UriSource = [Uri]$uiData.Logo
+        $bmp.EndInit()
+        $LogoImage.Source = $bmp
+        $window.Icon = $bmp
+    } catch {}
+}
+
+# Génération dynamique des Checkbox d'applications dans l'UI
+$uiRows = @()
+foreach ($app in $uiData.Apps) {
+    $grid = New-Object System.Windows.Controls.Grid
+    $col1 = New-Object System.Windows.Controls.ColumnDefinition; $col1.Width = [System.Windows.GridLength]::new(1, [System.Windows.GridUnitType]::Star)
+    $col2 = New-Object System.Windows.Controls.ColumnDefinition; $col2.Width = [System.Windows.GridLength]::new(100)
+    [void]$grid.ColumnDefinitions.Add($col1); [void]$grid.ColumnDefinitions.Add($col2)
+
+    $cb = New-Object System.Windows.Controls.CheckBox -Property @{
+        Content = $app.name
+        FontSize = 13
+        Margin = New-Object System.Windows.Thickness(5,4,5,4)
+        VerticalAlignment = "Center"
+    }
+    [System.Windows.Controls.Grid]::SetColumn($cb, 0)
+    [void]$grid.Children.Add($cb)
+
+    $statusLabel = New-Object System.Windows.Controls.TextBlock -Property @{
+        Text = ""
+        FontSize = 12
+        FontWeight = "Bold"
+        HorizontalAlignment = "Right"
+        VerticalAlignment = "Center"
+        Foreground = [System.Windows.Media.Brushes]::Gray
+    }
+    [System.Windows.Controls.Grid]::SetColumn($statusLabel, 1)
+    [void]$grid.Children.Add($statusLabel)
+
+    [void]$AppContainer.Children.Add($grid)
+
+    # Association de l'ID pour le suivi asynchrone
+    $uiData.Status[$app.id] = ""
+
+    $uiRows += [PSCustomObject]@{
+        App         = $app
+        CheckBox    = $cb
+        StatusLabel = $statusLabel
+        Wrapper     = $grid
+    }
+}
+
+# =========================
+# ACTIONS ET FILTRES DE L'INTERFACE
 # =========================
 $SearchBox.Add_TextChanged({
-    $term = $SearchBox.Text.Trim().ToLower()
-    foreach ($row in $rows) {
-        if ($term -eq "" -or $row.Name.ToLower().Contains($term)) {
-            $row.RowPanel.Visibility = "Visible"
+    $txt = $SearchBox.Text.Trim().ToLower()
+    foreach ($row in $uiRows) {
+        $row.Wrapper.Visibility = if ($txt -eq "" -or $row.App.name.ToLower().Contains($txt)) { "Visible" } else { "Collapsed" }
+    }
+})
+
+$BtnAll.Add_Click({ foreach ($row in $uiRows) { if ($row.Wrapper.Visibility -eq "Visible") { $row.CheckBox.IsChecked = $true } } })
+$BtnNone.Add_Click({ foreach ($row in $uiRows) { $row.CheckBox.IsChecked = $false } })
+
+# Déclenchement de l'installation
+$BtnGo.Add_Click({
+    if ($uiData.Running) { return }
+
+    $uiData.Selected.Clear()
+    foreach ($row in $uiRows) {
+        if ($row.CheckBox.IsChecked -eq $true) {
+            [void]$uiData.Selected.Add($row.App)
+            $row.StatusLabel.Text = "En attente"
+            $row.StatusLabel.Foreground = [System.Windows.Media.Brushes]::Orange
         } else {
-            $row.RowPanel.Visibility = "Collapsed"
+            $row.StatusLabel.Text = ""
         }
     }
-})
 
-# =========================
-# SELECTION AUTOMATIQUE
-# =========================
-$BtnSelectAll.Add_Click({
-    foreach ($row in $rows) {
-        if ($row.RowPanel.Visibility -eq "Visible") { $row.cb.IsChecked = $true }
-    }
-})
-$BtnSelectNone.Add_Click({
-    foreach ($row in $rows) {
-        if ($row.RowPanel.Visibility -eq "Visible") { $row.cb.IsChecked = $false }
-    }
-})
-
-# =========================
-# OUTILS DE JOURNALISATION
-# =========================
-function Write-GuiLog {
-    param($message)
-    $time = Get-Date -Format "HH:mm:ss"
-    $LogBox.AppendText("[$time] $message`r`n")
-    $LogBox.ScrollToEnd()
-}
-
-# =========================
-# RESOLUTION DE WINGET
-# =========================
-function Get-WinGetExePath {
-    try {
-        $pkg = Get-AppxPackage -Name "Microsoft.DesktopAppInstaller" -AllUsers -ErrorAction SilentlyContinue |
-               Sort-Object -Property Version -Descending | Select-Object -First 1
-        if ($pkg -and $pkg.InstallLocation) {
-            $candidate = Join-Path $pkg.InstallLocation "winget.exe"
-            if (Test-Path $candidate) { return $candidate }
-        }
-    } catch {}
-
-    try {
-        $cmd = Get-Command "winget.exe" -ErrorAction SilentlyContinue
-        if ($cmd) { return $cmd.Source }
-    } catch {}
-
-    return $null
-}
-
-function Initialize-WinGet {
-    $exe = Get-WinGetExePath
-    $works = $false
-
-    if ($exe) {
-        try {
-            $t = Start-Process -FilePath $exe -ArgumentList "--version" -Wait -PassThru -WindowStyle Hidden
-            if ($t.ExitCode -eq 0) { $works = $true }
-        } catch {}
-    }
-
-    if (-not $works) {
-        Write-GuiLog "Winget indisponible ou isolé. Tentative de fallback sur la commande système de base..."
-        $exe = "winget"
-    }
-    return $exe
-}
-
-function Invoke-WinGetInstall {
-    param($wingetExe, $appId)
-
-    $stdOut = [System.IO.Path]::GetTempFileName()
-    $argsList = @(
-        "install", "--id", $appId, "-e", "--silent",
-        "--accept-source-agreements", "--accept-package-agreements",
-        "--disable-interactivity", "--force"
-    )
-
-    try {
-        # Execution de winget de façon un peu plus souple
-        $p = Start-Process -FilePath $wingetExe -ArgumentList $argsList `
-             -Wait -PassThru -WindowStyle Hidden -RedirectStandardOutput $stdOut
-
-        $outText = (Get-Content $stdOut -Raw -ErrorAction SilentlyContinue)
-
-        return [PSCustomObject]@{
-            ExitCode = $p.ExitCode
-            Output   = "$outText".Trim()
-        }
-    }
-    catch {
-        return [PSCustomObject]@{
-            ExitCode = 999
-            Output   = $_.Exception.Message
-        }
-    }
-    finally {
-        if (Test-Path $stdOut) { Remove-Item $stdOut -ErrorAction SilentlyContinue }
-    }
-}
-
-# =========================
-# LOGIQUE D'INSTALLATION SÉQUENTIELLE
-# =========================
-function Run-InstallationQueue {
-    param($selectedItems)
-
-    Write-GuiLog "Vérification de Winget..."
-    $wingetExe = Initialize-WinGet
-    Write-GuiLog "Appel système Winget configuré."
-
-    $total = $selectedItems.Count
-    $index = 0
-
-    $ProgressBarCtrl.Maximum = $total
-    $ProgressBarCtrl.Value = 0
-
-    foreach ($app in $selectedItems) {
-        $index++
-        
-        # Forcer le rafraîchissement visuel à chaque étape
-        [System.Windows.Threading.Dispatcher]::CurrentDispatcher.Invoke([System.Windows.Threading.DispatcherPriority]::Background, [Action]{
-            $ProgressBarCtrl.Value = $index
-            $ProgressText.Text = "$index / $total"
-            $row = $rows | Where-Object { $_.Key -eq $app.Key }
-            if ($row) {
-                $row.StatusText.Text = "Installation..."
-                $row.StatusText.Foreground = $brushBlue
-            }
-        })
-
-        Write-GuiLog "Installation de $($app.Name)..."
-        $ok = $false
-
-        if ($app.Id) {
-            try {
-                $res = Invoke-WinGetInstall -wingetExe $wingetExe -appId $app.Id
-
-                if ($res.ExitCode -eq 0 -or $res.ExitCode -eq -1978335189 -or $res.ExitCode -eq 3010) {
-                    $ok = $true
-                } else {
-                    Write-GuiLog "Échec Winget (Code: $($res.ExitCode)) pour $($app.Name)."
-                    # Tentative de reset source rapide si échec réseau winget
-                    $null = Start-Process winget -ArgumentList "source reset --force" -Wait -WindowStyle Hidden
-                    $res2 = Invoke-WinGetInstall -wingetExe $wingetExe -appId $app.Id
-                    if ($res2.ExitCode -eq 0 -or $res2.ExitCode -eq 3010) { $ok = $true }
-                }
-            }
-            catch {
-                Write-GuiLog "Erreur Winget : $($_.Exception.Message)"
-            }
-        }
-
-        # --- PROTOCOLE DE REPLI EN TÉLÉCHARGEMENT WEB DIRECT ---
-        if (-not $ok -and $app.Url) {
-            Write-GuiLog "Déclenchement du repli par téléchargement direct..."
-            $ext  = if ($app.Url -match "\.msi(\?.*)?$") { "msi" } else { "exe" }
-            $file = Join-Path $env:TEMP ("meterix_{0}.{1}" -f $app.Key, $ext)
-            try {
-                Invoke-WebRequest -Uri $app.Url -OutFile $file -UseBasicParsing -TimeoutSec 180
-                if (Test-Path $file) {
-                    if ($ext -eq "msi") {
-                        $p = Start-Process "msiexec.exe" -ArgumentList @("/i", "`"$file`"", "/quiet", "/norestart") -Wait -PassThru
-                    } else {
-                        $args = if ($app.Args) { $app.Args } else { "/S" }
-                        $p = Start-Process $file -ArgumentList $args -Wait -PassThru
-                    }
-                    if ($p.ExitCode -eq 0 -or $p.ExitCode -eq 3010) { $ok = $true }
-                }
-            }
-            catch {
-                Write-GuiLog "Erreur lors du téléchargement/exécution directe."
-            }
-            finally {
-                if (Test-Path $file) { Remove-Item $file -ErrorAction SilentlyContinue }
-            }
-        }
-
-        # --- MISE À JOUR DE L'INTERFACE GLOBALE ---
-        [System.Windows.Threading.Dispatcher]::CurrentDispatcher.Invoke([System.Windows.Threading.DispatcherPriority]::Background, [Action]{
-            $row = $rows | Where-Object { $_.Key -eq $app.Key }
-            if ($row) {
-                if ($ok) {
-                    $row.StatusText.Text = "Installé"
-                    $row.StatusText.Foreground = $brushGreen
-                    Write-GuiLog "$($app.Name) : Terminé avec succès."
-                } else {
-                    $row.StatusText.Text = "Erreur"
-                    $row.StatusText.Foreground = $brushRed
-                    Write-GuiLog "Échec critique permanent pour $($app.Name)."
-                }
-            }
-        })
-    }
-
-    # Restauration des boutons sur le thread UI
-    [System.Windows.Threading.Dispatcher]::CurrentDispatcher.Invoke([System.Windows.Threading.DispatcherPriority]::Background, [Action]{
-        $BtnInstall.IsEnabled    = $true
-        $BtnSelectAll.IsEnabled  = $true
-        $BtnSelectNone.IsEnabled = $true
-        $SearchBox.IsEnabled     = $true
-
-        $okCount  = @($rows | Where-Object { $_.StatusText.Text -eq "Installé" }).Count
-        $errCount = @($rows | Where-Object { $_.StatusText.Text -eq "Erreur" }).Count
-
-        [System.Windows.MessageBox]::Show(
-            "Installation terminée.`n`nRéussies : $okCount`nÉchecs : $errCount",
-            "Météris Informatique",
-            [System.Windows.MessageBoxButton]::OK,
-            [System.Windows.MessageBoxImage]::Information
-        )
-    })
-}
-
-# =========================
-# DECLENCHEMENT INSTALLATION
-# =========================
-$BtnInstall.Add_Click({
-    $selected = $rows | Where-Object { $_.cb.IsChecked -eq $true }
-    if (-not $selected -or $selected.Count -eq 0) {
-        [System.Windows.MessageBox]::Show("Sélectionnez au moins un logiciel à installer.", "Météris Informatique")
+    if ($uiData.Selected.Count -eq 0) {
+        [System.Windows.MessageBox]::Show("Veuillez cocher au moins un logiciel.", "Météris Informatique")
         return
     }
 
-    foreach ($row in $rows) { $row.StatusText.Text = "" ; $row.StatusText.Foreground = $brushGray }
-    foreach ($row in $selected) { $row.StatusText.Text = "En attente" }
-    $LogBox.Text = ""
+    # Désactivation globale des contrôles pendant le travail
+    $BtnGo.IsEnabled = $false
+    $BtnAll.IsEnabled = $false
+    $BtnNone.IsEnabled = $false
+    $SearchBox.IsEnabled = $false
+    foreach ($row in $uiRows) { $row.CheckBox.IsEnabled = $false }
 
-    $BtnInstall.IsEnabled    = $false
-    $BtnSelectAll.IsEnabled  = $false
-    $BtnSelectNone.IsEnabled = $false
-    $SearchBox.IsEnabled     = $false
+    $uiData.Logs = ""
+    $uiData.SignalClose = $false
 
-    $itemsData = $selected | ForEach-Object {
-        [PSCustomObject]@{ Key = $_.Key; Name = $_.Name; Id = $_.Id; Url = $_.Url; Args = $_.Args }
-    }
-
-    # On utilise un scriptblock asynchrone léger ou l'exécution séquentielle forcée par événement WPF
-    # Pour éviter le freeze complet de l'UI sous iex, on délègue les tâches au dispatcher de manière fluide
-    $window.Dispatcher.BeginInvoke([System.Action]{
-        Run-InstallationQueue -selectedItems $itemsData
-    }) | Out-Null
+    # Lancement du Runspace en tâche de fond (True Multi-threading PowerShell)
+    $iss = [system.management.automation.runspaces.initialsessionstate]::CreateDefault()
+    $runspace = [runspacefactory]::CreateRunspace($iss)
+    $runspace.Open()
+    $powershell = [powershell]::Create().AddScript($installCode).AddArgument($uiData)
+    $powershell.Runspace = $runspace
+    [void]$powershell.BeginInvoke()
 })
 
 # =========================
-# AFFICHAGE DE LA FENETRE
+# LE TIMER DE RAFRAÎCHISSEMENT DE L'UI (Évite les freezes)
 # =========================
-$window.ShowDialog() | Out-Null
+# Ce bloc tourne en boucle toutes les 200ms sur l'UI pour appliquer les changements faits en arrière-plan
+$timer = New-Object System.Windows.Threading.DispatcherTimer
+$timer.Interval = [TimeSpan]::FromMilliseconds(200)
+$timer.Add_Tick({
+    # Mise à jour des textes de Logs
+    if ($LogBox.Text -ne $uiData.Logs) {
+        $LogBox.Text = $uiData.Logs
+        $LogBox.ScrollToEnd()
+    }
+
+    # Mise à jour des barres et indicateurs de progression globale
+    $ProgBar.Value = $uiData.Progress
+    $ProgText.Text = $uiData.TotalStr
+
+    # Mise à jour dynamique du statut individuel de chaque ligne d'application
+    foreach ($row in $uiRows) {
+        $currentStatus = $uiData.Status[$row.App.id]
+        if ($row.StatusLabel.Text -ne $currentStatus) {
+            $row.StatusLabel.Text = $currentStatus
+            switch ($currentStatus) {
+                "Installation..." { $row.StatusLabel.Foreground = [System.Windows.Media.Brushes]::DodgerBlue }
+                "Installé"        { $row.StatusLabel.Foreground = [System.Windows.Media.Brushes]::Green }
+                "Erreur"          { $row.StatusLabel.Foreground = [System.Windows.Media.Brushes]::Red }
+                default           { $row.StatusLabel.Foreground = [System.Windows.Media.Brushes]::Gray }
+            }
+        }
+    }
+
+    # Fin des opérations détectée en tâche de fond
+    if ($uiData.SignalClose) {
+        $timer.Stop()
+        $BtnGo.IsEnabled = $true
+        $BtnAll.IsEnabled = $true
+        $BtnNone.IsEnabled = $true
+        $SearchBox.IsEnabled = $true
+        foreach ($row in $uiRows) { $row.CheckBox.IsEnabled = $true }
+        
+        [System.Windows.MessageBox]::Show("Traitement de la file d'installation terminé !", "Météris Informatique", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information)
+        $uiData.SignalClose = $false
+        $timer.Start() # Relance le récepteur au cas où l'utilisateur refait une sélection
+    }
+})
+
+# Lancement du minuteur et ouverture définitive de l'application
+$timer.Start()
+[void]$window.ShowDialog()
+$timer.Stop()
