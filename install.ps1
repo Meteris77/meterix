@@ -352,7 +352,7 @@ $BtnSelectNone.Add_Click({
 })
 
 # =========================
-# LOGIQUE D'INSTALLATION SÉQUENTIELLE SANS ISOLATION
+# OUTILS DE JOURNALISATION
 # =========================
 function Write-GuiLog {
     param($message)
@@ -361,8 +361,107 @@ function Write-GuiLog {
     $LogBox.ScrollToEnd()
 }
 
+# =========================
+# RESOLUTION ROBUSTE DE WINGET (CORRECTIF "ISOLATION")
+# =========================
+# L'alias "winget" du PATH est en réalité un "App Execution Alias" MSIX qui
+# peut être invisible ou mal résolu dans certains contextes (session élevée
+# via RunAs, automatisation, profil différent, etc.). On contourne le
+# problème en retrouvant le binaire réel via le paquet App Installer.
+function Get-WinGetExePath {
+    try {
+        $pkg = Get-AppxPackage -Name "Microsoft.DesktopAppInstaller" -ErrorAction SilentlyContinue |
+               Sort-Object -Property Version -Descending | Select-Object -First 1
+        if ($pkg -and $pkg.InstallLocation) {
+            $candidate = Join-Path $pkg.InstallLocation "winget.exe"
+            if (Test-Path $candidate) { return $candidate }
+        }
+    } catch {}
+
+    try {
+        $cmd = Get-Command "winget.exe" -ErrorAction SilentlyContinue
+        if ($cmd) { return $cmd.Source }
+    } catch {}
+
+    return $null
+}
+
+function Initialize-WinGet {
+    $exe = Get-WinGetExePath
+    $works = $false
+
+    if ($exe) {
+        try {
+            $t = Start-Process -FilePath $exe -ArgumentList "--version" -Wait -PassThru -WindowStyle Hidden
+            if ($t.ExitCode -eq 0) { $works = $true }
+        } catch {}
+    }
+
+    if (-not $works) {
+        Write-GuiLog "Winget indisponible ou isolé du contexte courant. Tentative de réparation automatique..."
+        try {
+            if (-not (Get-Module -ListAvailable -Name Microsoft.WinGet.Client)) {
+                try { Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction SilentlyContinue } catch {}
+                Install-Module Microsoft.WinGet.Client -Scope CurrentUser -Force -AllowClobber -ErrorAction Stop
+            }
+            Import-Module Microsoft.WinGet.Client -ErrorAction Stop
+            Repair-WinGetPackageManager -Force -ErrorAction Stop
+            Write-GuiLog "Réparation de Winget effectuée."
+        } catch {
+            Write-GuiLog "Réparation automatique de Winget impossible : $($_.Exception.Message)"
+        }
+
+        $exe = Get-WinGetExePath
+    }
+
+    if (-not $exe) {
+        Write-GuiLog "ATTENTION : winget.exe introuvable. Seul le repli par téléchargement direct sera utilisé."
+    }
+
+    return $exe
+}
+
+function Invoke-WinGetInstall {
+    param($wingetExe, $appId)
+
+    $stdOut = [System.IO.Path]::GetTempFileName()
+    $stdErr = [System.IO.Path]::GetTempFileName()
+
+    $argsList = @(
+        "install", "--id", $appId, "-e", "--silent",
+        "--accept-source-agreements", "--accept-package-agreements",
+        "--disable-interactivity", "--force"
+    )
+
+    try {
+        $p = Start-Process -FilePath $wingetExe -ArgumentList $argsList `
+             -Wait -PassThru -WindowStyle Hidden `
+             -RedirectStandardOutput $stdOut -RedirectStandardError $stdErr
+
+        $outText = (Get-Content $stdOut -Raw -ErrorAction SilentlyContinue)
+        $errText = (Get-Content $stdErr -Raw -ErrorAction SilentlyContinue)
+
+        return [PSCustomObject]@{
+            ExitCode = $p.ExitCode
+            Output   = ("$outText`n$errText").Trim()
+        }
+    }
+    finally {
+        Remove-Item $stdOut, $stdErr -ErrorAction SilentlyContinue
+    }
+}
+
+# =========================
+# LOGIQUE D'INSTALLATION SÉQUENTIELLE
+# =========================
 function Run-InstallationQueue {
     param($selectedItems)
+
+    Write-GuiLog "Vérification de Winget..."
+    $wingetExe = Initialize-WinGet
+    if ($wingetExe) {
+        Write-GuiLog "Winget prêt : $wingetExe"
+    }
 
     $total = $selectedItems.Count
     $index = 0
@@ -384,32 +483,36 @@ function Run-InstallationQueue {
         Write-GuiLog "Installation de $($app.Name)..."
         $ok = $false
 
-        if ($app.Id) {
+        if ($app.Id -and $wingetExe) {
             try {
-                # Appel direct dans l'environnement de la session utilisateur
-                $p = Start-Process "winget" -ArgumentList @(
-                    "install", "--id", $app.Id, "-e", "--silent",
-                    "--accept-source-agreements", "--accept-package-agreements",
-                    "--force"
-                ) -Wait -PassThru -WindowStyle Hidden
+                $res = Invoke-WinGetInstall -wingetExe $wingetExe -appId $app.Id
 
-                if ($p.ExitCode -eq 0 -or $p.ExitCode -eq -1978335189 -or $p.ExitCode -eq 3010) {
+                if ($res.ExitCode -eq 0 -or $res.ExitCode -eq -1978335189 -or $res.ExitCode -eq 3010) {
                     $ok = $true
                 } else {
-                    Write-GuiLog "Échec Winget (Code: $($p.ExitCode)). Tentative de réinitialisation TLS..."
-                    # Correction dynamique si problème persistant de certificat
-                    $null = Start-Process "winget" -ArgumentList @("source", "reset", "--force") -Wait -WindowStyle Hidden
-                    $p = Start-Process "winget" -ArgumentList @(
-                        "install", "--id", $app.Id, "-e", "--silent",
-                        "--accept-source-agreements", "--accept-package-agreements"
-                    ) -Wait -PassThru -WindowStyle Hidden
-                    
-                    if ($p.ExitCode -eq 0 -or $p.ExitCode -eq 3010) { $ok = $true }
+                    Write-GuiLog "Échec Winget (Code: $($res.ExitCode)) pour $($app.Name)."
+                    if ($res.Output) {
+                        Write-GuiLog "Détail Winget : $($res.Output -replace '[\r\n]+', ' ')"
+                    }
+
+                    Write-GuiLog "Réinitialisation des sources Winget et nouvelle tentative..."
+                    $null = Start-Process -FilePath $wingetExe -ArgumentList @("source", "reset", "--force") -Wait -WindowStyle Hidden
+                    $null = Start-Process -FilePath $wingetExe -ArgumentList @("source", "update") -Wait -WindowStyle Hidden
+
+                    $res2 = Invoke-WinGetInstall -wingetExe $wingetExe -appId $app.Id
+                    if ($res2.ExitCode -eq 0 -or $res2.ExitCode -eq -1978335189 -or $res2.ExitCode -eq 3010) {
+                        $ok = $true
+                    } elseif ($res2.Output) {
+                        Write-GuiLog "Détail Winget (2e tentative) : $($res2.Output -replace '[\r\n]+', ' ')"
+                    }
                 }
             }
             catch {
-                Write-GuiLog "Erreur d'initialisation de l'outil Winget."
+                Write-GuiLog "Erreur d'initialisation de l'outil Winget : $($_.Exception.Message)"
             }
+        }
+        elseif ($app.Id -and -not $wingetExe) {
+            Write-GuiLog "Winget indisponible pour $($app.Name), passage au repli direct si possible."
         }
 
         # --- PROTOCOLE DE REPLI EN TÉLÉCHARGEMENT WEB DIRECT ---
