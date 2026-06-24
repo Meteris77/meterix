@@ -374,59 +374,56 @@ $installWorker = {
 
         if ($app.Id) {
             try {
+                # Tentative native
                 $p = Start-Process "winget" -ArgumentList @(
                     "install", "--id", $app.Id, "-e", "--silent",
                     "--accept-source-agreements", "--accept-package-agreements",
                     "--force"
                 ) -Wait -PassThru -WindowStyle Hidden
                 
-                # Correction si erreur source introuvable / package inexistant (-1978335212 ou -1978335138)
-                if ($p.ExitCode -eq -1978335212 -or $p.ExitCode -eq -1978335138) {
-                    Add-Log $sync "Problème d'index ou source Winget ($($p.ExitCode)). Réinitialisation forcée..."
-                    $null = Start-Process "winget" -ArgumentList @("source", "reset", "--force") -Wait -WindowStyle Hidden
-                    $null = Start-Process "winget" -ArgumentList @("source", "update", "--accept-source-agreements") -Wait -WindowStyle Hidden
+                # Si erreur réseau ou isolation d'ID (-1978335138 ou -1978335212)
+                if ($p.ExitCode -eq -1978335138 -or $p.ExitCode -eq -1978335212 -or $p.ExitCode -ne 0) {
+                    Add-Log $sync "Erreur d'isolation Winget active. Contournement via Shell CMD de confiance..."
                     
-                    Add-Log $sync "Nouvelle tentative après mise à jour des catalogues..."
-                    $p = Start-Process "winget" -ArgumentList @(
-                        "install", "--id", $app.Id, "-e", "--silent",
-                        "--accept-source-agreements", "--accept-package-agreements",
-                        "--force"
-                    ) -Wait -PassThru -WindowStyle Hidden
+                    # Exécution via un appel CMD direct pour hériter du bon magasin utilisateur/système
+                    $cmdArgs = "/c winget install --id `"$($app.Id)`" -e --silent --accept-source-agreements --accept-package-agreements --force"
+                    $p = Start-Process "cmd.exe" -ArgumentList $cmdArgs -Wait -PassThru -WindowStyle Hidden
                 }
 
-                if ($p.ExitCode -eq 0 -or $p.ExitCode -eq -1978335189) { 
+                if ($p.ExitCode -eq 0 -or $p.ExitCode -eq -1978335189 -or $p.ExitCode -eq 3010) { 
                     $ok = $true 
                 } else { 
-                    Add-Log $sync "Winget a échoué (Code $($p.ExitCode))."
+                    Add-Log $sync "Winget a renvoyé le code d'échec : $($p.ExitCode)."
                 }
             }
             catch {
-                Add-Log $sync "Erreur critique d'appel à Winget : $($_.Exception.Message)"
+                Add-Log $sync "L'outil Winget n'a pas pu s'initialiser."
             }
         }
 
-        # --- REPLI SI ÉCHEC WINGET (OU SI ID ABSENT) ---
+        # --- REPLI DIRECT SI WINGET ÉCHOUE OU ABSENT ---
         if (-not $ok -and $app.Url) {
-            Add-Log $sync "Tentative de téléchargement direct de repli depuis l'URL..."
+            Add-Log $sync "Lancement du protocole de repli par lien de téléchargement direct..."
             $ext  = if ($app.Url -match "\.msi(\?.*)?$") { "msi" } else { "exe" }
             $file = Join-Path $env:TEMP ("meterix_{0}.{1}" -f $app.Key, $ext)
             try {
                 Invoke-WebRequest -Uri $app.Url -OutFile $file -UseBasicParsing -TimeoutSec 300
-                if ((Test-Path $file) -and (Get-Item $file).Length -gt 100KB) {
+                if ((Test-Path $file) -and (Get-Item $file).Length -gt 50KB) {
                     if ($ext -eq "msi") {
-                        $p = Start-Process "msiexec.exe" -ArgumentList @("/i", $file, "/quiet", "/norestart") -Wait -PassThru -WindowStyle Hidden
+                        # Pas de -WindowStyle Hidden sur msiexec car cela bloque parfois l'acquisition de privilèges
+                        $p = Start-Process "msiexec.exe" -ArgumentList @("/i", "`"$file`"", "/quiet", "/norestart") -Wait -PassThru
                     } else {
                         $args = if ($app.Args) { $app.Args } else { "/S" }
-                        $p = Start-Process $file -ArgumentList $args -Wait -PassThru -WindowStyle Hidden
+                        $p = Start-Process $file -ArgumentList $args -Wait -PassThru
                     }
                     if ($p.ExitCode -eq 0 -or $p.ExitCode -eq 3010) { $ok = $true }
                 }
             }
             catch {
-                Add-Log $sync "Échec du téléchargement direct : $($_.Exception.Message)"
+                Add-Log $sync "Le téléchargement depuis le serveur a échoué : $($_.Exception.Message)"
             }
             finally {
-                Remove-Item $file -ErrorAction SilentlyContinue
+                if (Test-Path $file) { Remove-Item $file -ErrorAction SilentlyContinue }
             }
         }
 
@@ -435,7 +432,7 @@ $installWorker = {
             Add-Log $sync "$($app.Name) : installé avec succès."
         } else {
             Add-Status $sync $app.Key "error"
-            Add-Log $sync "Échec définitif d'installation pour $($app.Name)."
+            Add-Log $sync "Échec définitif pour $($app.Name)."
         }
     }
 
