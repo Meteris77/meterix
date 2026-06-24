@@ -352,65 +352,75 @@ $BtnSelectNone.Add_Click({
 })
 
 # =========================
-# LOGIQUE D'INSTALLATION ARRIERE-PLAN
+# LOGIQUE D'INSTALLATION SÉQUENTIELLE SANS ISOLATION
 # =========================
-$installWorker = {
-    param($itemsData, $sync)
+function Write-GuiLog {
+    param($message)
+    $time = Get-Date -Format "HH:mm:ss"
+    $LogBox.AppendText("[$time] $message`r`n")
+    $LogBox.ScrollToEnd()
+}
 
-    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13
+function Run-InstallationQueue {
+    param($selectedItems)
 
-    function Add-Status { param($s,$k,$st) [void]$s.StatusEvents.Add(@{ Key = $k; Status = $st }) }
-    function Add-Log    { param($s,$m) [void]$s.Log.Add("[" + (Get-Date -Format "HH:mm:ss") + "] " + $m) }
+    $total = $selectedItems.Count
+    $index = 0
 
-    $sync.Total   = $itemsData.Count
-    $sync.Index   = 0
-    $sync.Running = $true
+    $ProgressBarCtrl.Maximum = $total
+    $ProgressBarCtrl.Value = 0
 
-    foreach ($app in $itemsData) {
-        $sync.Index++
-        Add-Status $sync $app.Key "installing"
-        Add-Log $sync "Installation de $($app.Name)..."
+    foreach ($app in $selectedItems) {
+        $index++
+        $ProgressBarCtrl.Value = $index
+        $ProgressText.Text = "$index / $total"
+
+        $row = $rows | Where-Object { $_.Key -eq $app.Key }
+        if ($row) {
+            $row.StatusText.Text = "Installation..."
+            $row.StatusText.Foreground = $brushBlue
+        }
+
+        Write-GuiLog "Installation de $($app.Name)..."
         $ok = $false
 
         if ($app.Id) {
             try {
-                # Tentative native
+                # Appel direct dans l'environnement de la session utilisateur
                 $p = Start-Process "winget" -ArgumentList @(
                     "install", "--id", $app.Id, "-e", "--silent",
                     "--accept-source-agreements", "--accept-package-agreements",
                     "--force"
                 ) -Wait -PassThru -WindowStyle Hidden
-                
-                # Si erreur réseau ou isolation d'ID (-1978335138 ou -1978335212)
-                if ($p.ExitCode -eq -1978335138 -or $p.ExitCode -eq -1978335212 -or $p.ExitCode -ne 0) {
-                    Add-Log $sync "Erreur d'isolation Winget active. Contournement via Shell CMD de confiance..."
-                    
-                    # Exécution via un appel CMD direct pour hériter du bon magasin utilisateur/système
-                    $cmdArgs = "/c winget install --id `"$($app.Id)`" -e --silent --accept-source-agreements --accept-package-agreements --force"
-                    $p = Start-Process "cmd.exe" -ArgumentList $cmdArgs -Wait -PassThru -WindowStyle Hidden
-                }
 
-                if ($p.ExitCode -eq 0 -or $p.ExitCode -eq -1978335189 -or $p.ExitCode -eq 3010) { 
-                    $ok = $true 
-                } else { 
-                    Add-Log $sync "Winget a renvoyé le code d'échec : $($p.ExitCode)."
+                if ($p.ExitCode -eq 0 -or $p.ExitCode -eq -1978335189 -or $p.ExitCode -eq 3010) {
+                    $ok = $true
+                } else {
+                    Write-GuiLog "Échec Winget (Code: $($p.ExitCode)). Tentative de réinitialisation TLS..."
+                    # Correction dynamique si problème persistant de certificat
+                    $null = Start-Process "winget" -ArgumentList @("source", "reset", "--force") -Wait -WindowStyle Hidden
+                    $p = Start-Process "winget" -ArgumentList @(
+                        "install", "--id", $app.Id, "-e", "--silent",
+                        "--accept-source-agreements", "--accept-package-agreements"
+                    ) -Wait -PassThru -WindowStyle Hidden
+                    
+                    if ($p.ExitCode -eq 0 -or $p.ExitCode -eq 3010) { $ok = $true }
                 }
             }
             catch {
-                Add-Log $sync "L'outil Winget n'a pas pu s'initialiser."
+                Write-GuiLog "Erreur d'initialisation de l'outil Winget."
             }
         }
 
-        # --- REPLI DIRECT SI WINGET ÉCHOUE OU ABSENT ---
+        # --- PROTOCOLE DE REPLI EN TÉLÉCHARGEMENT WEB DIRECT ---
         if (-not $ok -and $app.Url) {
-            Add-Log $sync "Lancement du protocole de repli par lien de téléchargement direct..."
+            Write-GuiLog "Déclenchement du repli par téléchargement de l'exécutable..."
             $ext  = if ($app.Url -match "\.msi(\?.*)?$") { "msi" } else { "exe" }
             $file = Join-Path $env:TEMP ("meterix_{0}.{1}" -f $app.Key, $ext)
             try {
-                Invoke-WebRequest -Uri $app.Url -OutFile $file -UseBasicParsing -TimeoutSec 300
-                if ((Test-Path $file) -and (Get-Item $file).Length -gt 50KB) {
+                Invoke-WebRequest -Uri $app.Url -OutFile $file -UseBasicParsing -TimeoutSec 180
+                if ((Test-Path $file) -and (Get-Item $file).Length -gt 10KB) {
                     if ($ext -eq "msi") {
-                        # Pas de -WindowStyle Hidden sur msiexec car cela bloque parfois l'acquisition de privilèges
                         $p = Start-Process "msiexec.exe" -ArgumentList @("/i", "`"$file`"", "/quiet", "/norestart") -Wait -PassThru
                     } else {
                         $args = if ($app.Args) { $app.Args } else { "/S" }
@@ -420,24 +430,45 @@ $installWorker = {
                 }
             }
             catch {
-                Add-Log $sync "Le téléchargement depuis le serveur a échoué : $($_.Exception.Message)"
+                Write-GuiLog "Le serveur de téléchargement direct a renvoyé une erreur."
             }
             finally {
                 if (Test-Path $file) { Remove-Item $file -ErrorAction SilentlyContinue }
             }
         }
 
-        if ($ok) {
-            Add-Status $sync $app.Key "ok"
-            Add-Log $sync "$($app.Name) : installé avec succès."
-        } else {
-            Add-Status $sync $app.Key "error"
-            Add-Log $sync "Échec définitif pour $($app.Name)."
+        # --- MISE À JOUR DE L'INTERFACE GLOBALE ---
+        if ($row) {
+            if ($ok) {
+                $row.StatusText.Text = "Installé"
+                $row.StatusText.Foreground = $brushGreen
+                Write-GuiLog "$($app.Name) : Terminé avec succès."
+            } else {
+                $row.StatusText.Text = "Erreur"
+                $row.StatusText.Foreground = $brushRed
+                Write-GuiLog "Échec critique permanent pour $($app.Name)."
+            }
         }
+        
+        # Permet à la fenêtre WPF de rester fluide et de se redessiner
+        [System.Windows.Threading.Dispatcher]::CurrentDispatcher.Invoke([System.Windows.Threading.DispatcherPriority]::Background, [Action]{})
     }
 
-    $sync.Running  = $false
-    $sync.Finished = $true
+    # Restauration des boutons
+    $BtnInstall.IsEnabled    = $true
+    $BtnSelectAll.IsEnabled  = $true
+    $BtnSelectNone.IsEnabled = $true
+    $SearchBox.IsEnabled     = $true
+
+    $okCount  = @($rows | Where-Object { $_.StatusText.Text -eq "Installé" }).Count
+    $errCount = @($rows | Where-Object { $_.StatusText.Text -eq "Erreur" }).Count
+
+    [System.Windows.MessageBox]::Show(
+        "Installation terminée.`n`nRéussies : $okCount`nÉchecs : $errCount`n`nConsultez le journal pour le détail.",
+        "Météris Informatique",
+        [System.Windows.MessageBoxButton]::OK,
+        [System.Windows.MessageBoxImage]::Information
+    )
 }
 
 # =========================
@@ -453,8 +484,6 @@ $BtnInstall.Add_Click({
     foreach ($row in $rows) { $row.StatusText.Text = "" ; $row.StatusText.Foreground = $brushGray }
     foreach ($row in $selected) { $row.StatusText.Text = "En attente" }
     $LogBox.Text = ""
-    $ProgressBarCtrl.Value = 0
-    $ProgressText.Text = "0 / $($selected.Count)"
 
     $BtnInstall.IsEnabled    = $false
     $BtnSelectAll.IsEnabled  = $false
@@ -465,72 +494,8 @@ $BtnInstall.Add_Click({
         [PSCustomObject]@{ Key = $_.Key; Name = $_.Name; Id = $_.Id; Url = $_.Url; Args = $_.Args }
     }
 
-    $sync = [hashtable]::Synchronized(@{
-        Total          = 0
-        Index          = 0
-        Running        = $false
-        Finished       = $false
-        ConsumedLog    = 0
-        ConsumedStatus = 0
-        Log            = [System.Collections.ArrayList]::Synchronized([System.Collections.ArrayList]::new())
-        StatusEvents   = [System.Collections.ArrayList]::Synchronized([System.Collections.ArrayList]::new())
-    })
-
-    $ps = [System.Management.Automation.PowerShell]::Create()
-    [void]$ps.AddScript($installWorker).AddArgument($itemsData).AddArgument($sync)
-    $asyncHandle = $ps.BeginInvoke()
-
-    $timer = New-Object System.Windows.Threading.DispatcherTimer
-    $timer.Interval = [TimeSpan]::FromMilliseconds(150)
-
-    $tickHandler = {
-        $ProgressBarCtrl.Maximum = [Math]::Max($sync.Total, 1)
-        $ProgressBarCtrl.Value   = $sync.Index
-        $ProgressText.Text       = "$($sync.Index) / $($sync.Total)"
-
-        while ($sync.ConsumedStatus -lt $sync.StatusEvents.Count) {
-            $evt = $sync.StatusEvents[$sync.ConsumedStatus]
-            $row = $rows | Where-Object { $_.Key -eq $evt.Key }
-            if ($row) {
-                switch ($evt.Status) {
-                    "installing" { $row.StatusText.Text = "Installation..." ; $row.StatusText.Foreground = $brushBlue }
-                    "ok"         { $row.StatusText.Text = "Installé"        ; $row.StatusText.Foreground = $brushGreen }
-                    "error"      { $row.StatusText.Text = "Erreur"          ; $row.StatusText.Foreground = $brushRed }
-                }
-            }
-            $sync.ConsumedStatus++
-        }
-
-        while ($sync.ConsumedLog -lt $sync.Log.Count) {
-            $LogBox.AppendText($sync.Log[$sync.ConsumedLog] + "`r`n")
-            $sync.ConsumedLog++
-        }
-        if ($sync.ConsumedLog -gt 0) { $LogBox.ScrollToEnd() }
-
-        if ($sync.Finished) {
-            $timer.Stop()
-            $BtnInstall.IsEnabled    = $true
-            $BtnSelectAll.IsEnabled  = $true
-            $BtnSelectNone.IsEnabled = $true
-            $SearchBox.IsEnabled     = $true
-
-            $okCount  = @($rows | Where-Object { $_.StatusText.Text -eq "Installé" }).Count
-            $errCount = @($rows | Where-Object { $_.StatusText.Text -eq "Erreur" }).Count
-
-            try { [void]$ps.EndInvoke($asyncHandle) } catch {}
-            $ps.Dispose()
-
-            [System.Windows.MessageBox]::Show(
-                "Installation terminée.`n`nRéussies : $okCount`nÉchecs : $errCount`n`nConsultez le journal pour le détail.",
-                "Météris Informatique",
-                [System.Windows.MessageBoxButton]::OK,
-                [System.Windows.MessageBoxImage]::Information
-            )
-        }
-    }.GetNewClosure()
-
-    $timer.Add_Tick($tickHandler)
-    $timer.Start()
+    # Exécution directe
+    Run-InstallationQueue -selectedItems $itemsData
 })
 
 # =========================
